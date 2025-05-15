@@ -5,17 +5,8 @@ pub fn main() !void {
     try bus.set(.err_filter, .all);
     try bus.set(.fd_frames, true);
 
-    std.debug.print(
-        "{}\n",
-        .{@as(
-            zano.bus.Error,
-            @bitCast(zano.bus.CanFrame{
-                .can_id = .{ .id = 0x3FF },
-                .len = .{ .len = 0x00 },
-                .data = [_]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 },
-            }),
-        ).tx_error_counter()},
-    );
+    try bus.write(try .newRemote(0x00));
+    std.debug.print("{any}\n", .{try bus.read()});
 }
 
 const std = @import("std");
