@@ -2,7 +2,8 @@ pub fn main() !void {
     var bus: zano.Bus = try .open("vcan0");
     defer bus.deinit();
 
-    try bus.write(try .newRemote(0x00));
+    try bus.set(.err_filter, .all);
+    try bus.set(.fd_frames, true);
 
     std.debug.print(
         "{}\n",

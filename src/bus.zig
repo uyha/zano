@@ -80,7 +80,7 @@ fn OptionType(comptime option: Option) type {
     return switch (option) {
         .filter => []Filter,
         .err_filter => Error.Class,
-        else => true,
+        else => bool,
     };
 }
 pub const Filter = extern struct {
@@ -337,10 +337,14 @@ pub const Bus = struct {
         value: OptionType(option),
     ) SetError!void {
         try posix.setsockopt(
-            self,
+            self.handle,
             SOL.CAN_RAW,
             @intFromEnum(option),
-            asBytes(&value),
+            switch (option) {
+                .filter => asBytes(&value),
+                .err_filter => asBytes(&value),
+                else => asBytes(&@as(c_int, @intFromBool(value))),
+            },
         );
     }
 };
