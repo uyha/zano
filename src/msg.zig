@@ -4,10 +4,10 @@ pub const CanId = packed struct(u32) {
     remote: bool = false,
     extended: bool = false,
 
-    pub fn new(id: u16) CanId {
+    pub fn std(id: u16) CanId {
         return .{ .id = id & 0x7FF };
     }
-    pub fn newRemote(id: u16) CanId {
+    pub fn stdRemote(id: u16) CanId {
         return .{
             .id = id & 0x7FF,
             .remote = true,
@@ -15,13 +15,13 @@ pub const CanId = packed struct(u32) {
     }
     pub fn ext(id: u32) CanId {
         return .{
-            .id = id & 0x1F_FF_FF_FF,
+            .id = @intCast(id & 0x1F_FF_FF_FF),
             .extended = true,
         };
     }
     pub fn extRemote(id: u32) CanId {
         return .{
-            .id = id & 0x1F_FF_FF_FF,
+            .id = @intCast(id & 0x1F_FF_FF_FF),
             .remote = true,
             .extended = true,
         };
@@ -34,25 +34,40 @@ pub const Message = extern struct {
     len: u8,
     data: [max_data_len]u8 align(8),
 
-    pub const Error = error{DataTooBig};
-    pub fn new(id: u16, data: []const u8) Message.Error!Message {
-        if (data.len > 8) {
-            return Message.Error.DataTooBig;
-        }
+    pub fn std(id: u16, data: []const u8) Message {
+        const len: u8 = @intCast(if (data.len > 8) 8 else data.len);
 
         var message: Message = .{
-            .id = .new(id),
-            .len = @intCast(data.len),
+            .id = .std(id),
+            .len = len,
             .data = undefined,
         };
 
-        @memcpy(message.data[0..data.len], data);
+        @memcpy(message.data[0..len], data[0..len]);
 
         return message;
     }
 
-    pub fn newRemote(id: u16) Message.Error!Message {
-        return .{ .id = .newRemote(id), .len = 0, .data = undefined };
+    pub fn stdRemote(id: u16) Message {
+        return .{ .id = .stdRemote(id), .len = 0, .data = undefined };
+    }
+
+    pub fn ext(id: u16, data: []const u8) Message {
+        const len: u8 = @intCast(if (data.len > 8) 8 else data.len);
+
+        var message: Message = .{
+            .id = .ext(id),
+            .len = len,
+            .data = undefined,
+        };
+
+        @memcpy(message.data[0..len], data[0..len]);
+
+        return message;
+    }
+
+    pub fn extRemote(id: u16) Message {
+        return .{ .id = .extRemote(id), .len = 0, .data = undefined };
     }
 };
 
@@ -232,10 +247,10 @@ pub const Error = extern struct {
     pub fn transceiver(self: *const Error) Transceiver {
         return .from(self.data[4]);
     }
-    pub fn tx_error_counter(self: *const Error) Counter {
+    pub fn txErrCounter(self: *const Error) Counter {
         return .from(self.data[6]);
     }
-    pub fn rx_error_counter(self: *const Error) Counter {
+    pub fn rxErrCounter(self: *const Error) Counter {
         return .from(self.data[7]);
     }
 };

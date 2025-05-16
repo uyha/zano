@@ -5,7 +5,10 @@ pub fn main() !void {
     try bus.set(.err_filter, .all);
     try bus.set(.fd_frames, true);
 
-    try bus.write(try .newRemote(0x00));
+    try bus.write(.std(0x00, &.{}));
+    try bus.write(.stdRemote(0x00));
+    try bus.write(.ext(0x00, &.{}));
+    try bus.write(.extRemote(0x00));
     std.debug.print("{any}\n", .{try bus.read()});
 }
 
