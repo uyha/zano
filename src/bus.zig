@@ -38,29 +38,6 @@ const SockAddr = extern struct {
     },
 };
 
-/// CAN frame taken from <linux/can.h>
-pub const CanFrame = extern struct {
-    id: msg.CanId,
-    len: extern union {
-        len: u8,
-        can_dlc: u8,
-    },
-    pad: u8 = 0,
-    res0: u8 = 0,
-    len8_dlc: u8 = 0,
-    data: [8]u8 align(8),
-};
-
-/// CAN flexible data rate frame taken from <linux/can.h>
-const CanFdFrame = extern struct {
-    id: msg.CanId,
-    len: u8,
-    flags: u8,
-    res0: u8,
-    res1: u8,
-    data: [64]u8 align(8),
-};
-
 // Socket option level from <linux/can/raw.h>
 const SOL = struct {
     const CAN_RAW = 101;
@@ -143,7 +120,7 @@ pub const Bus = struct {
         } else {
             var frame: CanFrame = .{
                 .id = message.id,
-                .len = .{ .len = message.len },
+                .len = message.len,
                 .data = undefined,
             };
             @memcpy(&frame.data, message.data[0..8]);
@@ -160,7 +137,7 @@ pub const Bus = struct {
 
         _ = try posix.read(self.handle, asBytes(&frame));
 
-        const len = if (comptime conf.can_fd) frame.len else frame.len.len;
+        const len = if (comptime conf.can_fd) frame.len else frame.len;
 
         var result: Message = .{
             .id = frame.id,
@@ -202,5 +179,7 @@ const conf = @import("conf");
 
 const zano = @import("root.zig");
 const msg = zano.msg;
+const CanFrame = msg.CanFrame;
+const CanFdFrame = msg.CanFdFrame;
 const Message = msg.Message;
 const Error = msg.Error;

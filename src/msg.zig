@@ -1,7 +1,47 @@
+/// CAN frame taken from <linux/can.h>
+pub const CanFrame = extern struct {
+    id: CanId,
+    /// In <linux/can.h>, this field is defined as a union but the 2nd field is
+    /// deprecated. Hence, this field is defined to be a u8.
+    len: u8,
+    pad: u8 = 0,
+    res0: u8 = 0,
+    res1: u8 = 0,
+    data: [8]u8 align(8),
+};
+
+/// CAN flexible data rate frame taken from <linux/can.h>
+pub const CanFdFrame = extern struct {
+    pub const Flags = packed struct(u8) {
+        /// Bit rate switch - This bit indicates a second bitrate is/was used
+        /// for the payload.
+        brs: bool = 0,
+        /// Error state indicator - This bit represents the error state of the
+        /// transmitting node.
+        esi: bool = 0,
+        /// Marker for FD frame - Since `CanFdFrame` can be used where
+        /// `CanFrame` is expected. This is not used by the kernel, only for the
+        /// programmer to mark the frame when mixing `CanFrame` and
+        /// `CanFdFrame`.
+        fdf: bool = 1,
+        _pad: u5 = 0,
+    };
+
+    id: CanId,
+    len: u8,
+    flags: Flags,
+    res0: u8 = 0,
+    res1: u8 = 0,
+    data: [64]u8 align(8),
+};
+
 pub const CanId = packed struct(u32) {
     id: u29,
     err: bool = false,
     remote: bool = false,
+    /// Frame format
+    ///   - false: standard 11-bit frame
+    ///   - true:  extended 29-bit frame
     extended: bool = false,
 
     pub fn std(id: u16) CanId {
@@ -235,8 +275,12 @@ pub const Error = extern struct {
     };
 
     class: Class,
-    _pad: u8,
+    _pad: u8 = 0,
     data: [8]u8 align(8),
+
+    pub fn from(message: Message) Error {
+        return @bitCast(message);
+    }
 
     pub fn controller(self: *const Error) Controller {
         return .from(self.data[1]);
