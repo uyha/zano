@@ -97,7 +97,7 @@ fn entry(content: []const u8, row: usize) Line {
         for (content, 0..) |c, i| {
             switch (c) {
                 '=' => break :blk .{ content[0..i], content[i + 1 ..] },
-                '0'...'9', 'A'...'Z', 'a'...'z' => {},
+                '0'...'9', 'A'...'Z', 'a'...'z', '_' => {},
                 else => return empty(content, row),
             }
         }
@@ -181,16 +181,15 @@ fn err(content: []const u8, row: usize) Line {
     }
 
     // Check for non alphanumeric keys
-    entry_non_alphanumeric_key: {
+    entry_key_invalid: {
         for (content, 0..) |c, i| {
             switch (c) {
-                '=' => break :entry_non_alphanumeric_key,
-                '0'...'9', 'A'...'Z', 'a'...'z' => {},
-                else => return .{
+                '=' => break :entry_key_invalid,
+                else => if (!ascii.isAlphanumeric(c) and c != '_') return .{
                     .raw = content,
                     .row = row,
                     .content = .{ .err = .{
-                        .entry_non_alphanumeric_key = i,
+                        .entry_key_invalid = i,
                     } },
                 },
             }
@@ -234,7 +233,7 @@ pub const Error = union(enum) {
     section_empty: void,
 
     /// Point to the position of the first non alphanumeric character
-    entry_non_alphanumeric_key: usize,
+    entry_key_invalid: usize,
     /// Point to the expected position for the equal symbol
     entry_missing_equal: usize,
 };
@@ -316,11 +315,11 @@ test err {
     );
     try t.expect(.section_empty == line("[]", 1).content.err);
     try t.expectEqual(
-        Error{ .entry_non_alphanumeric_key = 0 },
+        Error{ .entry_key_invalid = 0 },
         line(" =", 1).content.err,
     );
     try t.expectEqual(
-        Error{ .entry_non_alphanumeric_key = 1 },
+        Error{ .entry_key_invalid = 1 },
         line("1 =", 1).content.err,
     );
     try t.expectEqual(
@@ -330,6 +329,7 @@ test err {
 }
 
 const std = @import("std");
+const ascii = std.ascii;
 const trim = std.mem.trim;
 const trimLeft = std.mem.trimLeft;
 const assert = std.debug.assert;
