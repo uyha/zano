@@ -6,6 +6,7 @@ pub const FeedError = fmt.ParseIntError || error{
 pub const Section = union(enum) {
     file_info: FileInfo,
     device_info: DeviceInfo,
+    dummy_usage: DummyUsage,
 
     pub fn feed(self: *Section, entry: parse.Entry) FeedError!void {
         return switch (self.*) {
@@ -125,6 +126,26 @@ pub const DeviceInfo = struct {
 };
 
 pub const DummyUsage = struct {
+    pub const map = .{
+        .{ "Dummy0001", "bool" },
+        .{ "Dummy0002", "i8" },
+        .{ "Dummy0003", "i16" },
+        .{ "Dummy0004", "i32" },
+        .{ "Dummy0005", "u8" },
+        .{ "Dummy0006", "u16" },
+        .{ "Dummy0007", "u32" },
+        .{ "Dummy0010", "i24" },
+        .{ "Dummy0012", "i40" },
+        .{ "Dummy0013", "i48" },
+        .{ "Dummy0014", "i56" },
+        .{ "Dummy0015", "i64" },
+        .{ "Dummy0016", "u24" },
+        .{ "Dummy0018", "u40" },
+        .{ "Dummy0019", "u48" },
+        .{ "Dummy001A", "u56" },
+        .{ "Dummy001B", "u64" },
+    };
+
     bool: ?bool = null,
 
     i8: ?bool = null,
@@ -148,6 +169,20 @@ pub const DummyUsage = struct {
     u48: ?bool = null,
     u56: ?bool = null,
     u64: ?bool = null,
+
+    pub fn feed(self: *DummyUsage, entry: parse.Entry) FeedError!void {
+        inline for (map) |map_entry| {
+            const key, const field = map_entry;
+            if (ieql(key, entry.key)) {
+                @field(self, field) = try entry.as(StripOptional(
+                    @FieldType(DummyUsage, field),
+                ));
+                return;
+            }
+        }
+
+        return FeedError.KeyUnrecognized;
+    }
 };
 
 pub fn Entry(T: type) type {
@@ -285,6 +320,54 @@ test DeviceInfo {
     try t.expect(!section.simple_boot_up_master.?);
     try t.expectEqual(1, section.number_of_rx_pdo.?);
     try t.expectEqual(2, section.number_of_tx_pdo.?);
+}
+
+test DummyUsage {
+    const t = std.testing;
+
+    const content =
+        \\[DummyUsage]
+        \\Dummy0001=0
+        \\Dummy0002=1
+        \\Dummy0002=1
+        \\Dummy0003=1
+        \\Dummy0004=1
+        \\Dummy0005=1
+        \\Dummy0006=1
+        \\Dummy0007=1
+    ;
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
+    {
+        const line = parse.line(iter.next().?);
+        try t.expectEqualStrings("DummyUsage", line.content.section);
+    }
+
+    var section: DummyUsage = .{};
+    while (iter.next()) |raw| {
+        const line: parse.Content = parse.line(raw).content;
+        switch (line) {
+            .entry => |entry| section.feed(entry) catch |err| {
+                std.debug.print("{s} is not recognized\n", .{entry.key});
+                return err;
+            },
+            .err => |err| {
+                std.debug.print("{any}\n", .{err});
+                std.debug.print("{s}\n", .{raw});
+                return error.ValueInvalid;
+            },
+            else => {},
+        }
+    }
+
+    try t.expect(!section.bool.?);
+    try t.expect(section.u8.?);
+    try t.expect(section.u16.?);
+    try t.expect(section.u32.?);
+    try t.expect(section.i8.?);
+    try t.expect(section.i16.?);
+    try t.expect(section.i32.?);
+    try t.expectEqual(null, section.i64);
 }
 
 const std = @import("std");
