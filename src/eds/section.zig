@@ -1,6 +1,8 @@
-pub const FeedError = fmt.ParseIntError || error{
+pub const FeedError = error{
     KeyUnrecognized,
     ValueInvalid,
+    EntryOutOfOrder,
+    KeyTooLarge,
 };
 
 pub const Section = union(enum) {
@@ -53,9 +55,9 @@ pub const FileInfo = struct {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
             if (ieql(key, entry.key)) {
-                @field(self, field) = try entry.as(StripOptional(
+                @field(self, field) = entry.as(StripOptional(
                     @FieldType(FileInfo, field),
-                ));
+                )) catch return FeedError.ValueInvalid;
                 return;
             }
         }
@@ -119,9 +121,9 @@ pub const DeviceInfo = struct {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
             if (ieql(key, entry.key)) {
-                @field(self, field) = try entry.as(StripOptional(
+                @field(self, field) = entry.as(StripOptional(
                     @FieldType(DeviceInfo, field),
-                ));
+                )) catch return FeedError.ValueInvalid;
                 return;
             }
         }
@@ -181,9 +183,9 @@ pub const DummyUsage = struct {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
             if (ieql(key, entry.key)) {
-                @field(self, field) = try entry.as(StripOptional(
+                @field(self, field) = entry.as(StripOptional(
                     @FieldType(DummyUsage, field),
-                ));
+                )) catch return FeedError.ValueInvalid;
                 return;
             }
         }
@@ -207,14 +209,22 @@ pub const MandatoryObjects = struct {
         entry: parse.Entry,
     ) FeedError!void {
         if (ieql("SupportedObjects", entry.key)) {
-            self.supported_objects = try fmt.parseInt(u16, entry.value, 0);
+            self.supported_objects = fmt.parseInt(u16, entry.value, 0) catch
+                return FeedError.ValueInvalid;
             return;
+        }
+
+        if (self.supported_objects == null) {
+            return FeedError.EntryOutOfOrder;
         }
 
         const i = fmt.parseInt(u16, entry.key, 10) catch
             return FeedError.KeyUnrecognized;
+        if (i > self.supported_objects.?) {
+            return FeedError.KeyTooLarge;
+        }
         if (i != self.count + 1) {
-            return FeedError.ObjectListOutOfOrder;
+            return FeedError.EntryOutOfOrder;
         }
 
         const index = fmt.parseInt(u16, entry.value, 0) catch
