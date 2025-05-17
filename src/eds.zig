@@ -1,5 +1,5 @@
-const parse = @import("dcf/parse.zig");
-const eval = @import("dcf/eval.zig");
+const parse = @import("eds/parse.zig");
+const eval = @import("eds/eval.zig");
 
 comptime {
     const t = @import("std").testing;
