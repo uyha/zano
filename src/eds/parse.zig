@@ -208,14 +208,15 @@ fn err(content: []const u8, row: usize) Line {
 pub const Line = struct {
     raw: []const u8,
     row: usize,
-    content: union(enum) {
-        comment: void,
-        /// Section name is case insensitive
-        section: []const u8,
-        entry: Entry,
-        empty: void,
-        err: Error,
-    },
+    content: Content,
+};
+pub const Content = union(enum) {
+    comment: void,
+    /// Section name is case insensitive
+    section: []const u8,
+    entry: Entry,
+    empty: void,
+    err: Error,
 };
 pub const Entry = struct {
     /// Entry key is case insensitive
