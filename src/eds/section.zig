@@ -1,8 +1,8 @@
-pub const FeedError = error{
+pub const FeedError = Allocator.Error || error{
     KeyUnrecognized,
     ValueInvalid,
     EntryOutOfOrder,
-    KeyTooLarge,
+    KeyOutOfBound,
 };
 
 pub const Section = union(enum) {
@@ -10,11 +10,25 @@ pub const Section = union(enum) {
     device_info: DeviceInfo,
     dummy_usage: DummyUsage,
     mandatory_objects: MandatoryObjects,
+    optional_objects: OptionalObjects,
+    manufacturer_objects: ManufacturerObjects,
 
-    pub fn feed(self: *Section, entry: parse.Entry) FeedError!void {
+    pub fn feed(
+        self: *Section,
+        entry: parse.Entry,
+        allocator: Allocator,
+    ) FeedError!void {
         return switch (self.*) {
+            .manufacturer_objects, .optional_objects => |*section| section.feed(allocator, entry),
             inline else => |*section| section.feed(entry),
         };
+    }
+
+    pub fn deinit(self: *Section, allocator: Allocator) void {
+        switch (self.*) {
+            .mandatory_objects, .optional_objects => |*obj| obj.deinit(allocator),
+            else => {},
+        }
     }
 };
 
@@ -221,7 +235,7 @@ pub const MandatoryObjects = struct {
         const i = fmt.parseInt(u16, entry.key, 10) catch
             return FeedError.KeyUnrecognized;
         if (i > self.supported_objects.?) {
-            return FeedError.KeyTooLarge;
+            return FeedError.KeyOutOfBound;
         }
         if (i != self.count + 1) {
             return FeedError.EntryOutOfOrder;
@@ -240,6 +254,63 @@ pub const MandatoryObjects = struct {
         self.count += 1;
     }
 };
+pub const OptionalObjects = struct {
+    supported_objects: ?u16 = null,
+    objects: ObjectList = .empty,
+
+    pub const empty: OptionalObjects = .{};
+
+    pub fn deinit(self: *OptionalObjects, allocator: Allocator) void {
+        self.objects.deinit(allocator);
+    }
+
+    pub fn feed(
+        self: *OptionalObjects,
+        allocator: Allocator,
+        entry: parse.Entry,
+    ) FeedError!void {
+        if (ieql("SupportedObjects", entry.key)) {
+            self.supported_objects = fmt.parseInt(u16, entry.value, 0) catch
+                return FeedError.ValueInvalid;
+            return;
+        }
+
+        if (self.supported_objects == null) {
+            return FeedError.EntryOutOfOrder;
+        }
+
+        const i = fmt.parseInt(u16, entry.key, 10) catch
+            return FeedError.KeyUnrecognized;
+        if (i > self.supported_objects.?) {
+            return FeedError.KeyOutOfBound;
+        }
+        if (i != self.objects.count() + 1) {
+            return FeedError.EntryOutOfOrder;
+        }
+
+        const index = fmt.parseInt(u16, entry.value, 0) catch
+            return FeedError.ValueInvalid;
+
+        if ((index < 0x1000 or 0x1FFF < index) and
+            (index < 0x6000 or 0xFFFF < index))
+        {
+            return FeedError.ValueInvalid;
+        }
+
+        try self.objects.put(allocator, index, {});
+    }
+};
+pub const ManufacturerObjects = struct {
+    supported_objects: ?u16 = null,
+    objects: ObjectList = .empty,
+
+    pub const empty: ManufacturerObjects = .{};
+
+    pub fn deinit(self: *ManufacturerObjects, allocator: Allocator) void {
+        self.objects.deinit(allocator);
+    }
+};
+
 pub fn Entry(T: type) type {
     return struct {
         entry: parse.Entry,
@@ -270,7 +341,6 @@ test FileInfo {
     const t = std.testing;
 
     const content =
-        \\[FileInfo]
         \\FileName=vendor1.eds
         \\FileVersion=1
         \\FileRevision=2
@@ -284,15 +354,9 @@ test FileInfo {
         \\ModifiedBy=Zaphod Beeblebrox
     ;
 
-    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
-
-    {
-        const line = parse.line(iter.next().?);
-        try t.expectEqualStrings("FileInfo", line.content.section);
-    }
-
     var section: FileInfo = .empty;
 
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
     while (iter.next()) |raw| {
         const line = parse.line(raw).content.entry;
         section.feed(line) catch |err| {
@@ -318,7 +382,6 @@ test DeviceInfo {
     const t = std.testing;
 
     const content =
-        \\[DeviceInfo]
         \\VendorName=Nepp Ltd.
         \\VendorNumber=156678
         \\ProductName=E/A 64
@@ -336,13 +399,9 @@ test DeviceInfo {
         \\NrOfTxPdo=2
     ;
 
-    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
-    {
-        const line = parse.line(iter.next().?);
-        try t.expectEqualStrings("DeviceInfo", line.content.section);
-    }
-
     var section: DeviceInfo = .empty;
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
     while (iter.next()) |raw| {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
@@ -381,7 +440,6 @@ test DummyUsage {
     const t = std.testing;
 
     const content =
-        \\[DummyUsage]
         \\Dummy0001=0
         \\Dummy0002=1
         \\Dummy0002=1
@@ -392,13 +450,9 @@ test DummyUsage {
         \\Dummy0007=1
     ;
 
-    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
-    {
-        const line = parse.line(iter.next().?);
-        try t.expectEqualStrings("DummyUsage", line.content.section);
-    }
-
     var section: DummyUsage = .empty;
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
     while (iter.next()) |raw| {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
@@ -429,18 +483,14 @@ test MandatoryObjects {
     const t = std.testing;
 
     const content =
-        \\[MandatoryObjects]
         \\SupportedObjects=2
         \\1=0x1000
         \\2=0x1001
     ;
 
-    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
-    {
-        const line = parse.line(iter.next().?);
-        try t.expectEqualStrings("MandatoryObjects", line.content.section);
-    }
     var section: MandatoryObjects = .empty;
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
     while (iter.next()) |raw| {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
@@ -463,8 +513,61 @@ test MandatoryObjects {
     try t.expect(null == section.@"1018");
 }
 
+test OptionalObjects {
+    const t = std.testing;
+    const allocator = t.allocator;
+
+    const content =
+        \\SupportedObjects=11
+        \\1=0x1003
+        \\2=0x1004
+        \\3=0x1005
+        \\4=0x1008
+        \\5=0x1009
+        \\6=0x100A
+        \\7=0x100C
+        \\8=0x100D
+        \\9=0x1010
+        \\10=0x1011
+    ;
+
+    var section: OptionalObjects = .empty;
+    defer section.deinit(allocator);
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
+    while (iter.next()) |raw| {
+        const line: parse.Content = parse.line(raw).content;
+        switch (line) {
+            .entry => |entry| section.feed(allocator, entry) catch |err| {
+                std.debug.print("{s} is not recognized\n", .{entry.key});
+                return err;
+            },
+            .err => |err| {
+                std.debug.print("{any}\n", .{err});
+                std.debug.print("{s}\n", .{raw});
+                return error.ValueInvalid;
+            },
+            else => {},
+        }
+    }
+
+    try t.expectEqual(11, section.supported_objects.?);
+    try t.expectEqual(10, section.objects.count());
+    try t.expect(section.objects.contains(0x1003));
+    try t.expect(section.objects.contains(0x1011));
+    try t.expect(!section.objects.contains(0x1012));
+
+    try t.expectEqual(
+        FeedError.ValueInvalid,
+        section.feed(allocator, parse.line("11=0x2000").content.entry),
+    );
+}
+
 const std = @import("std");
 const ascii = std.ascii;
 const fmt = std.fmt;
+const Allocator = std.mem.Allocator;
+
+const ObjectList = std.AutoArrayHashMapUnmanaged(u16, void);
 
 const parse = @import("parse.zig");
