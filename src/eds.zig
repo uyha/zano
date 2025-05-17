@@ -1,9 +1,9 @@
 const parse = @import("eds/parse.zig");
-const eval = @import("eds/eval.zig");
+const section = @import("eds/section.zig");
 
 comptime {
     const t = @import("std").testing;
 
     t.refAllDecls(parse);
-    t.refAllDecls(eval);
+    t.refAllDecls(section);
 }
