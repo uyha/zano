@@ -39,33 +39,31 @@
 
 /// This assumes the `content` parameter contains no newline character (neither
 /// '\r' nor '\n')
-pub fn line(content: []const u8, row: usize) Line {
-    return comment(content, row);
+pub fn line(raw: []const u8) Line {
+    return comment(raw);
 }
-fn comment(content: []const u8, row: usize) Line {
-    if (content.len >= 1 and content[0] == ';') {
+fn comment(raw: []const u8) Line {
+    if (raw.len >= 1 and raw[0] == ';') {
         return .{
-            .raw = content,
-            .row = row,
+            .raw = raw,
             .content = .comment,
         };
     }
-    return section(content, row);
+    return section(raw);
 }
-fn section(content: []const u8, row: usize) Line {
-    if (content.len < 2 or content[0] != '[') {
-        return entry(content, row);
+fn section(raw: []const u8) Line {
+    if (raw.len < 2 or raw[0] != '[') {
+        return entry(raw);
     }
-    if (content[1] == ']') {
+    if (raw[1] == ']') {
         return .{
-            .raw = content,
-            .row = row,
+            .raw = raw,
             .content = .{ .err = .section_empty },
         };
     }
 
     var end: ?usize = null;
-    for (content[1..], 1..) |c, i| {
+    for (raw[1..], 1..) |c, i| {
         if (end == null) {
             switch (c) {
                 ']' => end = i,
@@ -73,24 +71,23 @@ fn section(content: []const u8, row: usize) Line {
             }
         } else {
             if (c != ' ' and c != '\t') {
-                return entry(content, row);
+                return entry(raw);
             }
         }
     }
 
     if (end) |i| {
         return .{
-            .raw = content,
-            .row = row,
-            .content = .{ .section = content[1..i] },
+            .raw = raw,
+            .content = .{ .section = raw[1..i] },
         };
     }
 
-    return entry(content, row);
+    return entry(raw);
 }
-fn entry(content: []const u8, row: usize) Line {
+fn entry(content: []const u8) Line {
     if (content.len > 0 and content[0] == '=') {
-        return empty(content, row);
+        return empty(content);
     }
 
     const key, const value = blk: {
@@ -98,43 +95,41 @@ fn entry(content: []const u8, row: usize) Line {
             switch (c) {
                 '=' => break :blk .{ content[0..i], content[i + 1 ..] },
                 '0'...'9', 'A'...'Z', 'a'...'z', '_' => {},
-                else => return empty(content, row),
+                else => return empty(content),
             }
         }
-        return empty(content, row);
+        return empty(content);
     };
 
     return .{
         .raw = content,
-        .row = row,
         .content = .{ .entry = .{
             .key = key,
             .value = trim(u8, value, " \t"),
         } },
     };
 }
-fn empty(content: []const u8, row: usize) Line {
-    for (content) |c| {
+fn empty(raw: []const u8) Line {
+    for (raw) |c| {
         switch (c) {
             ' ', '\t' => {},
-            else => return err(content, row),
+            else => return err(raw),
         }
     }
 
-    return .{ .raw = content, .row = row, .content = .empty };
+    return .{ .raw = raw, .content = .empty };
 }
-fn err(content: []const u8, row: usize) Line {
-    assert(content.len > 0);
+fn err(raw: []const u8) Line {
+    assert(raw.len > 0);
 
     // Check for leading spaces in comment like lines
     {
-        const slice = trimLeft(u8, content, " \t");
+        const slice = trimLeft(u8, raw, " \t");
         if (slice[0] == ';') {
             return .{
-                .raw = content,
-                .row = row,
+                .raw = raw,
                 .content = .{ .err = .{
-                    .comment_leading_space = content.len - slice.len,
+                    .comment_leading_space = raw.len - slice.len,
                 } },
             };
         }
@@ -142,17 +137,16 @@ fn err(content: []const u8, row: usize) Line {
 
     // Check for leading spaces in section like lines
     section_leading_space: {
-        if (content[0] == '[') {
+        if (raw[0] == '[') {
             break :section_leading_space;
         }
 
-        const slice = trimLeft(u8, content, " \t");
+        const slice = trimLeft(u8, raw, " \t");
         if (slice.len > 0 and slice[0] == '[') {
             return .{
-                .raw = content,
-                .row = row,
+                .raw = raw,
                 .content = .{ .err = .{
-                    .section_leading_space = content.len - slice.len,
+                    .section_leading_space = raw.len - slice.len,
                 } },
             };
         }
@@ -163,15 +157,14 @@ fn err(content: []const u8, row: usize) Line {
         var start_found = false;
         var end_found = false;
 
-        for (content, 0..) |c, i| {
+        for (raw, 0..) |c, i| {
             if (!start_found) {
                 start_found = c == '[';
             } else if (!end_found) {
                 end_found = c == ']';
             } else if (c != ' ' and c != '\t') {
                 return .{
-                    .raw = content,
-                    .row = row,
+                    .raw = raw,
                     .content = .{ .err = .{
                         .section_trailing_character = i,
                     } },
@@ -182,12 +175,11 @@ fn err(content: []const u8, row: usize) Line {
 
     // Check for non alphanumeric keys
     entry_key_invalid: {
-        for (content, 0..) |c, i| {
+        for (raw, 0..) |c, i| {
             switch (c) {
                 '=' => break :entry_key_invalid,
                 else => if (!ascii.isAlphanumeric(c) and c != '_') return .{
-                    .raw = content,
-                    .row = row,
+                    .raw = raw,
                     .content = .{ .err = .{
                         .entry_key_invalid = i,
                     } },
@@ -197,17 +189,15 @@ fn err(content: []const u8, row: usize) Line {
     }
 
     return .{
-        .raw = content,
-        .row = row,
+        .raw = raw,
         .content = .{ .err = .{
-            .entry_missing_equal = content.len,
+            .entry_missing_equal = raw.len,
         } },
     };
 }
 
 pub const Line = struct {
     raw: []const u8,
-    row: usize,
     content: Content,
 };
 pub const Content = union(enum) {
@@ -273,7 +263,7 @@ pub const Error = union(enum) {
 test comment {
     const t = std.testing;
 
-    try t.expect(.comment == line("; This is a comment ", 1).content);
+    try t.expect(.comment == line("; This is a comment ").content);
 }
 
 test section {
@@ -281,15 +271,15 @@ test section {
 
     try t.expectEqualStrings(
         "section name",
-        line("[section name] ", 1).content.section,
+        line("[section name] ").content.section,
     );
     try t.expectEqualStrings(
         " spaces ",
-        line("[ spaces ]  ", 1).content.section,
+        line("[ spaces ]  ").content.section,
     );
     try t.expectEqualStrings(
         ";spaces;",
-        line("[;spaces;]  ", 1).content.section,
+        line("[;spaces;]  ").content.section,
     );
 }
 
@@ -297,25 +287,25 @@ test entry {
     const t = std.testing;
 
     {
-        const actual = line("2kEy1=value ", 1);
+        const actual = line("2kEy1=value ");
 
         try t.expectEqualStrings("2kEy1", actual.content.entry.key);
         try t.expectEqualStrings("value", actual.content.entry.value);
     }
     {
-        const actual = line("key=\t  \tvalue value \t ", 1);
+        const actual = line("key=\t  \tvalue value \t ");
 
         try t.expectEqualStrings("key", actual.content.entry.key);
         try t.expectEqualStrings("value value", actual.content.entry.value);
     }
     {
-        const actual = line("key=", 1);
+        const actual = line("key=");
 
         try t.expectEqualStrings("key", actual.content.entry.key);
         try t.expectEqualStrings("", actual.content.entry.value);
     }
     {
-        const actual = line("key=0xasdj", 1);
+        const actual = line("key=0xasdj");
 
         try t.expectEqualStrings("key", actual.content.entry.key);
         try t.expectEqualStrings("0xasdj", actual.content.entry.value);
@@ -325,8 +315,8 @@ test entry {
 test empty {
     const t = std.testing;
 
-    try t.expect(.empty == line("", 1).content);
-    try t.expect(.empty == line(" \t ", 1).content);
+    try t.expect(.empty == line("").content);
+    try t.expect(.empty == line(" \t ").content);
 }
 
 test err {
@@ -334,29 +324,29 @@ test err {
 
     try t.expectEqual(
         Error{ .comment_leading_space = 4 },
-        line(" \t \t;", 1).content.err,
+        line(" \t \t;").content.err,
     );
-    try t.expect(.entry_missing_equal == line("asfd", 1).content.err);
+    try t.expect(.entry_missing_equal == line("asfd").content.err);
     try t.expectEqual(
         Error{ .section_leading_space = 3 },
-        line(" \t [section]", 1).content.err,
+        line(" \t [section]").content.err,
     );
     try t.expectEqual(
         Error{ .section_trailing_character = 11 },
-        line("[section] \tasdf", 1).content.err,
+        line("[section] \tasdf").content.err,
     );
-    try t.expect(.section_empty == line("[]", 1).content.err);
+    try t.expect(.section_empty == line("[]").content.err);
     try t.expectEqual(
         Error{ .entry_key_invalid = 0 },
-        line(" =", 1).content.err,
+        line(" =").content.err,
     );
     try t.expectEqual(
         Error{ .entry_key_invalid = 1 },
-        line("1 =", 1).content.err,
+        line("1 =").content.err,
     );
     try t.expectEqual(
         Error{ .entry_missing_equal = 1 },
-        line("1", 1).content.err,
+        line("1").content.err,
     );
 }
 
