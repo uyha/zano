@@ -37,24 +37,31 @@
 //! space = " " | "\t" ;
 //! newline = "\n" | "\r\n" ;
 
-pub const Error = error{InvalidInput};
 /// This assumes the `content` parameter contains no newline character (neither
 /// '\r' nor '\n')
-pub fn line(content: []const u8, row: usize) Error!Line {
+pub fn line(content: []const u8, row: usize) Line {
     return comment(content, row);
 }
-fn comment(content: []const u8, row: usize) Error!Line {
+fn comment(content: []const u8, row: usize) Line {
     if (content.len >= 1 and content[0] == ';') {
-        return .{ .comment = .{
-            .content = content,
+        return .{
+            .raw = content,
             .row = row,
-        } };
+            .content = .comment,
+        };
     }
     return section(content, row);
 }
-fn section(content: []const u8, row: usize) Error!Line {
-    if (content.len < 3 or content[0] != '[' or content[1] == ']') {
+fn section(content: []const u8, row: usize) Line {
+    if (content.len < 2 or content[0] != '[') {
         return entry(content, row);
+    }
+    if (content[1] == ']') {
+        return .{
+            .raw = content,
+            .row = row,
+            .content = .{ .err = .section_empty },
+        };
     }
 
     var end: ?usize = null;
@@ -72,16 +79,16 @@ fn section(content: []const u8, row: usize) Error!Line {
     }
 
     if (end) |i| {
-        return .{ .section = .{
-            .content = content,
-            .name = content[1..i],
+        return .{
+            .raw = content,
             .row = row,
-        } };
+            .content = .{ .section = content[1..i] },
+        };
     }
 
     return entry(content, row);
 }
-fn entry(content: []const u8, row: usize) Error!Line {
+fn entry(content: []const u8, row: usize) Line {
     if (content.len > 0 and content[0] == '=') {
         return empty(content, row);
     }
@@ -97,176 +104,232 @@ fn entry(content: []const u8, row: usize) Error!Line {
         return empty(content, row);
     };
 
-    return .{ .entry = .{
-        .content = content,
-        .key = key,
-        .value = trim(u8, value, " \t"),
+    return .{
+        .raw = content,
         .row = row,
-    } };
+        .content = .{ .entry = .{
+            .key = key,
+            .value = trim(u8, value, " \t"),
+        } },
+    };
 }
-fn empty(content: []const u8, row: usize) Error!Line {
+fn empty(content: []const u8, row: usize) Line {
     for (content) |c| {
         switch (c) {
             ' ', '\t' => {},
-            else => return Error.InvalidInput,
+            else => return err(content, row),
         }
     }
 
-    return .{ .empty = .{ .content = content, .row = row } };
+    return .{ .raw = content, .row = row, .content = .empty };
+}
+fn err(content: []const u8, row: usize) Line {
+    assert(content.len > 0);
+
+    // Check for leading spaces in comment like lines
+    {
+        const slice = trimLeft(u8, content, " \t");
+        if (slice[0] == ';') {
+            return .{
+                .raw = content,
+                .row = row,
+                .content = .{ .err = .{
+                    .comment_leading_space = content.len - slice.len,
+                } },
+            };
+        }
+    }
+
+    // Check for leading spaces in section like lines
+    section_leading_space: {
+        if (content[0] == '[') {
+            break :section_leading_space;
+        }
+
+        const slice = trimLeft(u8, content, " \t");
+        if (slice.len > 0 and slice[0] == '[') {
+            return .{
+                .raw = content,
+                .row = row,
+                .content = .{ .err = .{
+                    .section_leading_space = content.len - slice.len,
+                } },
+            };
+        }
+    }
+
+    // Check for trailing characters in secion like lines
+    {
+        var start_found = false;
+        var end_found = false;
+
+        for (content, 0..) |c, i| {
+            if (!start_found) {
+                start_found = c == '[';
+            } else if (!end_found) {
+                end_found = c == ']';
+            } else if (c != ' ' and c != '\t') {
+                return .{
+                    .raw = content,
+                    .row = row,
+                    .content = .{ .err = .{
+                        .section_trailing_character = i,
+                    } },
+                };
+            }
+        }
+    }
+
+    // Check for non alphanumeric keys
+    entry_non_alphanumeric_key: {
+        for (content, 0..) |c, i| {
+            switch (c) {
+                '=' => break :entry_non_alphanumeric_key,
+                '0'...'9', 'A'...'Z', 'a'...'z' => {},
+                else => return .{
+                    .raw = content,
+                    .row = row,
+                    .content = .{ .err = .{
+                        .entry_non_alphanumeric_key = i,
+                    } },
+                },
+            }
+        }
+    }
+
+    return .{
+        .raw = content,
+        .row = row,
+        .content = .{ .err = .{
+            .entry_missing_equal = content.len,
+        } },
+    };
 }
 
-pub const Line = union(enum) {
-    comment: Comment,
-    section: Section,
-    entry: Entry,
-    empty: Empty,
-};
-pub const Comment = struct {
-    content: []const u8,
+pub const Line = struct {
+    raw: []const u8,
     row: usize,
-};
-pub const Section = struct {
-    content: []const u8,
-    /// Section name is case insensitive
-    name: []const u8,
-    row: usize,
+    content: union(enum) {
+        comment: void,
+        /// Section name is case insensitive
+        section: []const u8,
+        entry: Entry,
+        empty: void,
+        err: Error,
+    },
 };
 pub const Entry = struct {
-    content: []const u8,
     /// Entry key is case insensitive
     key: []const u8,
     value: []const u8,
-    row: usize,
 };
+pub const Error = union(enum) {
+    /// Point to the position of the first ";"
+    comment_leading_space: usize,
 
-pub const Empty = struct {
-    content: []const u8,
-    row: usize,
+    /// Point to the position of the first "["
+    section_leading_space: usize,
+    /// Point to the position of the first non-space character after "]"
+    section_trailing_character: usize,
+    section_empty: void,
+
+    /// Point to the position of the first non alphanumeric character
+    entry_non_alphanumeric_key: usize,
+    /// Point to the expected position for the equal symbol
+    entry_missing_equal: usize,
 };
 
 test comment {
     const t = std.testing;
 
-    {
-        const content = "; This is a comment ";
-        const row: usize = 1;
-
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.comment.content);
-        try t.expectEqual(row, actual.comment.row);
-    }
+    try t.expect(.comment == line("; This is a comment ", 1).content);
 }
 
 test section {
     const t = std.testing;
 
-    {
-        const content = "[section name] ";
-        const row: usize = 1;
-
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.section.content);
-        try t.expectEqualStrings("section name", actual.section.name);
-        try t.expectEqual(row, actual.section.row);
-    }
-
-    {
-        const content = "[ spaces ]  ";
-        const row: usize = 1;
-
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.section.content);
-        try t.expectEqualStrings(" spaces ", actual.section.name);
-        try t.expectEqual(row, actual.section.row);
-    }
+    try t.expectEqualStrings(
+        "section name",
+        line("[section name] ", 1).content.section,
+    );
+    try t.expectEqualStrings(
+        " spaces ",
+        line("[ spaces ]  ", 1).content.section,
+    );
+    try t.expectEqualStrings(
+        ";spaces;",
+        line("[;spaces;]  ", 1).content.section,
+    );
 }
 
 test entry {
     const t = std.testing;
 
     {
-        const content = "2kEy1=value ";
-        const row: usize = 1;
+        const actual = line("2kEy1=value ", 1);
 
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.entry.content);
-        try t.expectEqualStrings("2kEy1", actual.entry.key);
-        try t.expectEqualStrings("value", actual.entry.value);
-        try t.expectEqual(row, actual.entry.row);
+        try t.expectEqualStrings("2kEy1", actual.content.entry.key);
+        try t.expectEqualStrings("value", actual.content.entry.value);
     }
     {
-        const content = "key=\t  \tvalue value \t ";
-        const row: usize = 1;
+        const actual = line("key=\t  \tvalue value \t ", 1);
 
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.entry.content);
-        try t.expectEqualStrings("key", actual.entry.key);
-        try t.expectEqualStrings("value value", actual.entry.value);
-        try t.expectEqual(row, actual.entry.row);
+        try t.expectEqualStrings("key", actual.content.entry.key);
+        try t.expectEqualStrings("value value", actual.content.entry.value);
     }
     {
-        const content = "key=";
-        const row: usize = 1;
+        const actual = line("key=", 1);
 
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.entry.content);
-        try t.expectEqualStrings("key", actual.entry.key);
-        try t.expectEqualStrings("", actual.entry.value);
-        try t.expectEqual(row, actual.entry.row);
+        try t.expectEqualStrings("key", actual.content.entry.key);
+        try t.expectEqualStrings("", actual.content.entry.value);
     }
     {
-        const content = "key=0xasdj";
-        const row: usize = 1;
+        const actual = line("key=0xasdj", 1);
 
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.entry.content);
-        try t.expectEqualStrings("key", actual.entry.key);
-        try t.expectEqualStrings("0xasdj", actual.entry.value);
-        try t.expectEqual(row, actual.entry.row);
+        try t.expectEqualStrings("key", actual.content.entry.key);
+        try t.expectEqualStrings("0xasdj", actual.content.entry.value);
     }
 }
 
 test empty {
     const t = std.testing;
 
-    {
-        const content = "";
-        const row: usize = 1;
-
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.empty.content);
-        try t.expectEqual(row, actual.empty.row);
-    }
-    {
-        const content = " \t ";
-        const row: usize = 1;
-
-        const actual = try line(content, row);
-
-        try t.expectEqualStrings(content, actual.empty.content);
-        try t.expectEqual(row, actual.empty.row);
-    }
+    try t.expect(.empty == line("", 1).content);
+    try t.expect(.empty == line(" \t ", 1).content);
 }
 
-test "Invalid lines" {
+test err {
     const t = std.testing;
 
-    try t.expectEqual(Error.InvalidInput, line("asfd", 1));
-    try t.expectEqual(Error.InvalidInput, line("[]", 1));
-    try t.expectEqual(Error.InvalidInput, line(" [section]a", 1));
-    try t.expectEqual(Error.InvalidInput, line("[section]a", 1));
-    try t.expectEqual(Error.InvalidInput, line(" ;a", 1));
-    try t.expectEqual(Error.InvalidInput, line("asdf;asdf=", 1));
-    try t.expectEqual(Error.InvalidInput, line(" =", 1));
+    try t.expectEqual(
+        Error{ .comment_leading_space = 4 },
+        line(" \t \t;", 1).content.err,
+    );
+    try t.expect(.entry_missing_equal == line("asfd", 1).content.err);
+    try t.expectEqual(
+        Error{ .section_leading_space = 3 },
+        line(" \t [section]", 1).content.err,
+    );
+    try t.expectEqual(
+        Error{ .section_trailing_character = 11 },
+        line("[section] \tasdf", 1).content.err,
+    );
+    try t.expect(.section_empty == line("[]", 1).content.err);
+    try t.expectEqual(
+        Error{ .entry_non_alphanumeric_key = 0 },
+        line(" =", 1).content.err,
+    );
+    try t.expectEqual(
+        Error{ .entry_non_alphanumeric_key = 1 },
+        line("1 =", 1).content.err,
+    );
+    try t.expectEqual(
+        Error{ .entry_missing_equal = 1 },
+        line("1", 1).content.err,
+    );
 }
 
 const std = @import("std");
 const trim = std.mem.trim;
+const trimLeft = std.mem.trimLeft;
+const assert = std.debug.assert;
