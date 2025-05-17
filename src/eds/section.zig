@@ -46,6 +46,8 @@ pub const FileInfo = struct {
     modification_date: ?[10]u8 = null,
     modified_by: ?[]const u8 = null,
 
+    pub const empty: FileInfo = .{};
+
     pub fn feed(self: *FileInfo, entry: parse.Entry) FeedError!void {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
@@ -110,6 +112,8 @@ pub const DeviceInfo = struct {
     number_of_tx_pdo: ?u16 = null,
     lss_supported: ?bool = null,
 
+    pub const empty: DeviceInfo = .{};
+
     pub fn feed(self: *DeviceInfo, entry: parse.Entry) FeedError!void {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
@@ -169,6 +173,8 @@ pub const DummyUsage = struct {
     u48: ?bool = null,
     u56: ?bool = null,
     u64: ?bool = null,
+
+    pub const empty: DummyUsage = .{};
 
     pub fn feed(self: *DummyUsage, entry: parse.Entry) FeedError!void {
         inline for (map) |map_entry| {
@@ -236,7 +242,7 @@ test FileInfo {
         try t.expectEqualStrings("FileInfo", line.content.section);
     }
 
-    var section: FileInfo = .{};
+    var section: FileInfo = .empty;
 
     while (iter.next()) |raw| {
         const line = parse.line(raw).content.entry;
@@ -287,7 +293,7 @@ test DeviceInfo {
         try t.expectEqualStrings("DeviceInfo", line.content.section);
     }
 
-    var section: DeviceInfo = .{};
+    var section: DeviceInfo = .empty;
     while (iter.next()) |raw| {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
@@ -343,7 +349,7 @@ test DummyUsage {
         try t.expectEqualStrings("DummyUsage", line.content.section);
     }
 
-    var section: DummyUsage = .{};
+    var section: DummyUsage = .empty;
     while (iter.next()) |raw| {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
