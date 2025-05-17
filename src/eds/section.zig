@@ -309,6 +309,40 @@ pub const ManufacturerObjects = struct {
     pub fn deinit(self: *ManufacturerObjects, allocator: Allocator) void {
         self.objects.deinit(allocator);
     }
+
+    pub fn feed(
+        self: *ManufacturerObjects,
+        allocator: Allocator,
+        entry: parse.Entry,
+    ) FeedError!void {
+        if (ieql("SupportedObjects", entry.key)) {
+            self.supported_objects = fmt.parseInt(u16, entry.value, 0) catch
+                return FeedError.ValueInvalid;
+            return;
+        }
+
+        if (self.supported_objects == null) {
+            return FeedError.EntryOutOfOrder;
+        }
+
+        const i = fmt.parseInt(u16, entry.key, 10) catch
+            return FeedError.KeyUnrecognized;
+        if (i > self.supported_objects.?) {
+            return FeedError.KeyOutOfBound;
+        }
+        if (i != self.objects.count() + 1) {
+            return FeedError.EntryOutOfOrder;
+        }
+
+        const index = fmt.parseInt(u16, entry.value, 0) catch
+            return FeedError.ValueInvalid;
+
+        if (index < 0x2000 or 0x5FFF < index) {
+            return FeedError.ValueInvalid;
+        }
+
+        try self.objects.put(allocator, index, {});
+    }
 };
 
 pub fn Entry(T: type) type {
@@ -560,6 +594,56 @@ test OptionalObjects {
     try t.expectEqual(
         FeedError.ValueInvalid,
         section.feed(allocator, parse.line("11=0x2000").content.entry),
+    );
+}
+
+test ManufacturerObjects {
+    const t = std.testing;
+    const allocator = t.allocator;
+
+    const content =
+        \\SupportedObjects=11
+        \\1=0x2000
+        \\2=0x2001
+        \\3=0x2002
+        \\4=0x2003
+        \\5=0x2004
+        \\6=0x2005
+        \\7=0x2006
+        \\8=0x2007
+        \\9=0x2008
+        \\10=0x2009
+    ;
+
+    var section: ManufacturerObjects = .empty;
+    defer section.deinit(allocator);
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
+    while (iter.next()) |raw| {
+        const line: parse.Content = parse.line(raw).content;
+        switch (line) {
+            .entry => |entry| section.feed(allocator, entry) catch |err| {
+                std.debug.print("{s} is not recognized\n", .{entry.key});
+                return err;
+            },
+            .err => |err| {
+                std.debug.print("{any}\n", .{err});
+                std.debug.print("{s}\n", .{raw});
+                return error.ValueInvalid;
+            },
+            else => {},
+        }
+    }
+
+    try t.expectEqual(11, section.supported_objects.?);
+    try t.expectEqual(10, section.objects.count());
+    try t.expect(section.objects.contains(0x2000));
+    try t.expect(section.objects.contains(0x2009));
+    try t.expect(!section.objects.contains(0x200A));
+
+    try t.expectEqual(
+        FeedError.ValueInvalid,
+        section.feed(allocator, parse.line("11=0x6000").content.entry),
     );
 }
 
