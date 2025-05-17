@@ -7,6 +7,7 @@ pub const Section = union(enum) {
     file_info: FileInfo,
     device_info: DeviceInfo,
     dummy_usage: DummyUsage,
+    mandatory_objects: MandatoryObjects,
 
     pub fn feed(self: *Section, entry: parse.Entry) FeedError!void {
         return switch (self.*) {
@@ -191,6 +192,44 @@ pub const DummyUsage = struct {
     }
 };
 
+pub const MandatoryObjects = struct {
+    supported_objects: ?u16 = null,
+    @"1000": ?void = null,
+    @"1001": ?void = null,
+    @"1018": ?void = null,
+
+    count: u16 = 0,
+
+    pub const empty: MandatoryObjects = .{};
+
+    pub fn feed(
+        self: *MandatoryObjects,
+        entry: parse.Entry,
+    ) FeedError!void {
+        if (ieql("SupportedObjects", entry.key)) {
+            self.supported_objects = try fmt.parseInt(u16, entry.value, 0);
+            return;
+        }
+
+        const i = fmt.parseInt(u16, entry.key, 10) catch
+            return FeedError.KeyUnrecognized;
+        if (i != self.count + 1) {
+            return FeedError.ObjectListOutOfOrder;
+        }
+
+        const index = fmt.parseInt(u16, entry.value, 0) catch
+            return FeedError.ValueInvalid;
+
+        switch (index) {
+            0x1000 => self.@"1000" = {},
+            0x1001 => self.@"1001" = {},
+            0x1018 => self.@"1018" = {},
+            else => return FeedError.ValueInvalid,
+        }
+
+        self.count += 1;
+    }
+};
 pub fn Entry(T: type) type {
     return struct {
         entry: parse.Entry,
@@ -374,6 +413,44 @@ test DummyUsage {
     try t.expect(section.i16.?);
     try t.expect(section.i32.?);
     try t.expectEqual(null, section.i64);
+}
+
+test MandatoryObjects {
+    const t = std.testing;
+
+    const content =
+        \\[MandatoryObjects]
+        \\SupportedObjects=2
+        \\1=0x1000
+        \\2=0x1001
+    ;
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
+    {
+        const line = parse.line(iter.next().?);
+        try t.expectEqualStrings("MandatoryObjects", line.content.section);
+    }
+    var section: MandatoryObjects = .empty;
+    while (iter.next()) |raw| {
+        const line: parse.Content = parse.line(raw).content;
+        switch (line) {
+            .entry => |entry| section.feed(entry) catch |err| {
+                std.debug.print("{s} is not recognized\n", .{entry.key});
+                return err;
+            },
+            .err => |err| {
+                std.debug.print("{any}\n", .{err});
+                std.debug.print("{s}\n", .{raw});
+                return error.ValueInvalid;
+            },
+            else => {},
+        }
+    }
+
+    try t.expectEqual(2, section.supported_objects.?);
+    try t.expect({} == section.@"1000");
+    try t.expect({} == section.@"1001");
+    try t.expect(null == section.@"1018");
 }
 
 const std = @import("std");
