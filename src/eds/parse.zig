@@ -222,6 +222,37 @@ pub const Entry = struct {
     /// Entry key is case insensitive
     key: []const u8,
     value: []const u8,
+
+    pub const ParseError = std.fmt.ParseIntError || error{ValueInvalid};
+    pub fn as(self: *const Entry, comptime T: type) ParseError!T {
+        switch (T) {
+            bool => {
+                if (self.value.len != 1) {
+                    return ParseError.ValueInvalid;
+                }
+                switch (self.value[0]) {
+                    '0' => return false,
+                    '1' => return true,
+                    else => return ParseError.ValueInvalid,
+                }
+            },
+            []const u8 => return self.value,
+            u8, u16, u32, u64, i8, i16, i32, i64 => return std.fmt.parseInt(T, self.value, 0),
+            else => {},
+        }
+
+        const info = @typeInfo(T);
+
+        switch (info) {
+            .array => |array| {
+                if (self.value.len != array.len) {
+                    return ParseError.ValueInvalid;
+                }
+                return self.value[0..array.len].*;
+            },
+            else => @compileError(@typeName(T) ++ " is not supported"),
+        }
+    }
 };
 pub const Error = union(enum) {
     /// Point to the position of the first ";"
