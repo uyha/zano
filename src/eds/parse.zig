@@ -213,7 +213,7 @@ pub const Entry = struct {
     key: []const u8,
     value: []const u8,
 
-    pub const ParseError = std.fmt.ParseIntError || error{ValueInvalid};
+    pub const ParseError = error{ValueInvalid};
     pub fn as(self: *const Entry, comptime T: type) ParseError!T {
         switch (T) {
             bool => {
@@ -227,18 +227,39 @@ pub const Entry = struct {
                 }
             },
             []const u8 => return self.value,
-            u8, u16, u32, u64, i8, i16, i32, i64 => return std.fmt.parseInt(T, self.value, 0),
+            u8, u16, u32, u64, i8, i16, i32, i64 => return std.fmt.parseInt(T, self.value, 0) catch {
+                return ParseError.ValueInvalid;
+            },
             else => {},
         }
 
-        const info = @typeInfo(T);
-
-        switch (info) {
-            .array => |array| {
-                if (self.value.len != array.len) {
+        switch (@typeInfo(T)) {
+            .array => |info| {
+                if (self.value.len != info.len) {
                     return ParseError.ValueInvalid;
                 }
-                return self.value[0..array.len].*;
+                return self.value[0..info.len].*;
+            },
+            .@"enum" => |info| {
+                // Taken from `std.enums.fromInt`
+                if (std.fmt.parseInt(info.tag_type, self.value, 0)) |int| {
+                    if (!info.is_exhaustive) {
+                        return @enumFromInt(int);
+                    }
+                    for (std.enums.values(T)) |value| {
+                        if (@intFromEnum(value) == int) {
+                            return @enumFromInt(int);
+                        }
+                    }
+                    return ParseError.ValueInvalid;
+                } else |_| {
+                    return std.meta.stringToEnum(T, self.value) orelse
+                        return ParseError.ValueInvalid;
+                }
+            },
+            .@"struct" => |info| {
+                _ = &info;
+                return ParseError.ValueInvalid;
             },
             else => @compileError(@typeName(T) ++ " is not supported"),
         }

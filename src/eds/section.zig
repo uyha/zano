@@ -371,6 +371,83 @@ pub const ManufacturerObjects = struct {
     }
 };
 
+/// The section name of an object/sub-object shall be one of the following
+/// formats:
+/// - [${index}]
+/// - [${index}sub${sub_index}]
+pub const Object = struct {
+    pub const map = .{
+        .{ "SubNumber", "sub_number" },
+        .{ "ParameterName", "parameter_name" },
+        .{ "ObjectType", "object_type" },
+        .{ "DataType", "data_type" },
+        .{ "LowLimit", "low_limit" },
+        .{ "HighLimit", "high_limit" },
+        .{ "AccessType", "access_type" },
+        .{ "DefaultValue", "default_value" },
+        .{ "PdoMapping", "pdo_mapping" },
+        .{ "ObjectFlags", "object_flags" },
+        .{ "CompactSubObj", "compact_sub_obj" },
+    };
+
+    sub_number: ?u8 = null,
+    parameter_name: ?[]const u8 = null,
+    object_type: ?types.Object = null,
+    data_type: ?types.Data = null,
+    low_limit: ?[]const u8 = null,
+    high_limit: ?[]const u8 = null,
+    access_type: ?types.Access = null,
+    default_value: ?[]const u8 = null,
+    pdo_mapping: ?bool = null,
+    object_flags: ?ObjFlags = null,
+    /// If `$ObjectType` is `0x09` (array), and `CompactSubObj` appears in the
+    /// section and > 0, `$CompactSubObj` sub-objects shall be generated as
+    /// follows by default:
+    ///
+    /// - The 0x00 sub-object object will have:
+    ///   - ParameterName=NrOfObjects
+    ///   - ObjectType=0x07
+    ///   - DataType=0x0002
+    ///   - LowLimit=
+    ///   - HighLimit=
+    ///   - AccessType=ro
+    ///   - DefaultValues=$CompactSubObj
+    ///   - PDOMapping=0
+    ///
+    /// - The 0x01 - `$CompactSubObj` sub-objects will have (the actual value
+    ///   for the sub-index is referred to as $sub_index):
+    ///   - ParameterName=$ParameterName$sub_index
+    ///   - ObjectType=0x07
+    ///   - DataType=$DataType
+    ///   - LowLimit=
+    ///   - HighLimit=
+    ///   - AccessType=$AccessType
+    ///   - DefaultValue=$DefaultValue
+    ///   - PDOMapping=$PDOMapping
+    ///
+    /// The parameter names can be specified seperately by having a section
+    /// named [${index}Name].
+    compact_sub_obj: ?u8 = null,
+
+    pub const empty: Object = .{};
+
+    pub fn feed(self: *Object, entry: parse.Entry) FeedError!void {
+        inline for (map) |map_entry| {
+            const key, const field = map_entry;
+            if (ieql(key, entry.key)) {
+                return assign(&@field(self, field), entry);
+            }
+        }
+
+        return FeedError.KeyUnrecognized;
+    }
+};
+pub const ObjFlags = packed struct(u32) {
+    refuse_write_on_download: bool,
+    refuse_read_on_scan: bool,
+    _pad: u30 = 0,
+};
+
 fn StripOptional(T: type) type {
     return switch (@typeInfo(T)) {
         .optional => |info| info.child,
@@ -412,11 +489,18 @@ test FileInfo {
 
     var iter = std.mem.tokenizeAny(u8, content, "\r\n");
     while (iter.next()) |raw| {
-        const line = parse.line(raw).content.entry;
-        section.feed(line) catch |err| {
-            std.debug.print("{s} is not recognized\n", .{line.key});
-            return err;
-        };
+        const line: parse.Content = parse.line(raw).content;
+        switch (line) {
+            .entry => |entry| section.feed(entry) catch |err| {
+                std.debug.print("{}: {s}\n", .{ err, entry.key });
+                return err;
+            },
+            .err => |err| {
+                std.debug.print("{}: {s}\n", .{ err, raw });
+                return error.WTF;
+            },
+            else => return error.WTF,
+        }
     }
 
     try t.expectEqualStrings("vendor1.eds", section.file_name.?);
@@ -464,15 +548,14 @@ test DeviceInfo {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
             .entry => |entry| section.feed(entry) catch |err| {
-                std.debug.print("{s} is not recognized\n", .{entry.key});
+                std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
             .err => |err| {
-                std.debug.print("{any}\n", .{err});
-                std.debug.print("{s}\n", .{raw});
-                return error.ValueInvalid;
+                std.debug.print("{}: {s}\n", .{ err, raw });
+                return error.WTF;
             },
-            else => {},
+            else => return error.WTF,
         }
     }
 
@@ -522,10 +605,10 @@ test DummyUsage {
                 return err;
             },
             .err => |err| {
-                std.debug.print("{any}: {s}\n", .{ err, raw });
-                return error.ValueInvalid;
+                std.debug.print("{}: {s}\n", .{ err, raw });
+                return error.WTF;
             },
-            else => {},
+            else => return error.WTF,
         }
     }
 
@@ -559,15 +642,14 @@ test MandatoryObjects {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
             .entry => |entry| section.feed(entry) catch |err| {
-                std.debug.print("{s} is not recognized\n", .{entry.key});
+                std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
             .err => |err| {
-                std.debug.print("{any}\n", .{err});
-                std.debug.print("{s}\n", .{raw});
-                return error.ValueInvalid;
+                std.debug.print("{}: {s}\n", .{ err, raw });
+                return error.WTF;
             },
-            else => {},
+            else => return error.WTF,
         }
     }
 
@@ -603,15 +685,14 @@ test OptionalObjects {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
             .entry => |entry| section.feed(allocator, entry) catch |err| {
-                std.debug.print("{s} is not recognized\n", .{entry.key});
+                std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
             .err => |err| {
-                std.debug.print("{any}\n", .{err});
-                std.debug.print("{s}\n", .{raw});
-                return error.ValueInvalid;
+                std.debug.print("{}: {s}\n", .{ err, raw });
+                return error.WTF;
             },
-            else => {},
+            else => return error.WTF,
         }
     }
 
@@ -653,15 +734,14 @@ test ManufacturerObjects {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
             .entry => |entry| section.feed(allocator, entry) catch |err| {
-                std.debug.print("{s} is not recognized\n", .{entry.key});
+                std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
             .err => |err| {
-                std.debug.print("{any}\n", .{err});
-                std.debug.print("{s}\n", .{raw});
-                return error.ValueInvalid;
+                std.debug.print("{}: {s}\n", .{ err, raw });
+                return error.WTF;
             },
-            else => {},
+            else => return error.WTF,
         }
     }
 
@@ -677,6 +757,52 @@ test ManufacturerObjects {
     );
 }
 
+test Object {
+    const t = std.testing;
+
+    {
+        const content =
+            \\ParameterName=Device Type
+            \\ObjectType=0x7
+            \\DataType=0x0007
+            \\AccessType=ro
+            \\DefaultValue=
+            \\PDOMapping=0
+        ;
+
+        var section: Object = .empty;
+
+        var iter = std.mem.tokenizeAny(u8, content, "\r\n");
+        while (iter.next()) |raw| {
+            const line: parse.Content = parse.line(raw).content;
+            switch (line) {
+                .entry => |entry| section.feed(entry) catch |err| {
+                    std.debug.print("{}: {s}\n", .{ err, entry.key });
+                    return err;
+                },
+                .err => |err| {
+                    std.debug.print("{}: {s}\n", .{ err, raw });
+                    return error.WTF;
+                },
+                else => return error.WTF,
+            }
+        }
+
+        try t.expectEqualStrings("Device Type", section.parameter_name.?);
+        try t.expectEqual(types.Object.@"var", section.object_type.?);
+        try t.expectEqual(types.Data.unsigned32, section.data_type.?);
+        try t.expectEqual(types.Access.ro, section.access_type.?);
+        try t.expectEqualStrings("", section.default_value.?);
+        try t.expect(!section.pdo_mapping.?);
+        try t.expectEqual(null, section.low_limit);
+        try t.expectEqual(null, section.high_limit);
+        try t.expectEqual(
+            FeedError.KeyDuplicated,
+            section.feed(parse.line("DefaultValue=").content.entry),
+        );
+    }
+}
+
 const std = @import("std");
 const ascii = std.ascii;
 const fmt = std.fmt;
@@ -685,3 +811,4 @@ const Allocator = std.mem.Allocator;
 const ObjectList = std.AutoArrayHashMapUnmanaged(u16, void);
 
 const parse = @import("parse.zig");
+const types = @import("types.zig");
