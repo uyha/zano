@@ -115,6 +115,7 @@ pub const DeviceInfo = struct {
         .{ "NrOfRxPdo", "number_of_rx_pdo" },
         .{ "NrOfTxPdo", "number_of_tx_pdo" },
         .{ "LSS_Supported", "lss_supported" },
+        .{ "CompactPDO", "compact_pdo" },
     };
 
     vendor_name: ?[]const u8 = null,
@@ -139,6 +140,8 @@ pub const DeviceInfo = struct {
     number_of_rx_pdo: ?u16 = null,
     number_of_tx_pdo: ?u16 = null,
     lss_supported: ?bool = null,
+    // Specify which PDO communication parameter is implemented by default
+    compact_pdo: ?u8 = null,
 
     pub const empty: DeviceInfo = .{};
 
