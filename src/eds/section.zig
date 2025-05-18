@@ -2,7 +2,6 @@ pub const FeedError = Allocator.Error || error{
     KeyUnrecognized,
     ValueInvalid,
     EntryOutOfOrder,
-    KeyOutOfBound,
 };
 
 pub const Section = union(enum) {
@@ -232,17 +231,19 @@ pub const MandatoryObjects = struct {
             return FeedError.EntryOutOfOrder;
         }
 
-        const i = fmt.parseInt(u16, entry.key, 10) catch
+        const i = fmt.parseInt(u16, entry.key, 10) catch {
             return FeedError.KeyUnrecognized;
+        };
         if (i > self.supported_objects.?) {
-            return FeedError.KeyOutOfBound;
+            return FeedError.KeyUnrecognized;
         }
         if (i != self.count + 1) {
             return FeedError.EntryOutOfOrder;
         }
 
-        const index = fmt.parseInt(u16, entry.value, 0) catch
+        const index = fmt.parseInt(u16, entry.value, 0) catch {
             return FeedError.ValueInvalid;
+        };
 
         switch (index) {
             0x1000 => self.@"1000" = {},
@@ -282,7 +283,7 @@ pub const OptionalObjects = struct {
         const i = fmt.parseInt(u16, entry.key, 10) catch
             return FeedError.KeyUnrecognized;
         if (i > self.supported_objects.?) {
-            return FeedError.KeyOutOfBound;
+            return FeedError.KeyUnrecognized;
         }
         if (i != self.objects.count() + 1) {
             return FeedError.EntryOutOfOrder;
@@ -328,7 +329,7 @@ pub const ManufacturerObjects = struct {
         const i = fmt.parseInt(u16, entry.key, 10) catch
             return FeedError.KeyUnrecognized;
         if (i > self.supported_objects.?) {
-            return FeedError.KeyOutOfBound;
+            return FeedError.KeyUnrecognized;
         }
         if (i != self.objects.count() + 1) {
             return FeedError.EntryOutOfOrder;
@@ -345,12 +346,6 @@ pub const ManufacturerObjects = struct {
     }
 };
 
-pub fn Entry(T: type) type {
-    return struct {
-        entry: parse.Entry,
-        value: T,
-    };
-}
 fn StripOptional(T: type) type {
     return switch (@typeInfo(T)) {
         .optional => |info| info.child,
