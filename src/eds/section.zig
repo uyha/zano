@@ -2,7 +2,20 @@ pub const FeedError = Allocator.Error || error{
     KeyUnrecognized,
     ValueInvalid,
     EntryOutOfOrder,
+    KeyDuplicated,
 };
+
+fn assign(
+    out: anytype,
+    entry: parse.Entry,
+) error{ ValueInvalid, KeyDuplicated }!void {
+    const Target = StripOptional(@typeInfo(@TypeOf(out)).pointer.child);
+
+    if (out.* != null) {
+        return error.KeyDuplicated;
+    }
+    out.* = entry.as(Target) catch return error.ValueInvalid;
+}
 
 pub const Section = union(enum) {
     file_info: FileInfo,
@@ -68,10 +81,7 @@ pub const FileInfo = struct {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
             if (ieql(key, entry.key)) {
-                @field(self, field) = entry.as(StripOptional(
-                    @FieldType(FileInfo, field),
-                )) catch return FeedError.ValueInvalid;
-                return;
+                return assign(&@field(self, field), entry);
             }
         }
 
@@ -134,10 +144,7 @@ pub const DeviceInfo = struct {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
             if (ieql(key, entry.key)) {
-                @field(self, field) = entry.as(StripOptional(
-                    @FieldType(DeviceInfo, field),
-                )) catch return FeedError.ValueInvalid;
-                return;
+                return assign(&@field(self, field), entry);
             }
         }
 
@@ -196,10 +203,7 @@ pub const DummyUsage = struct {
         inline for (map) |map_entry| {
             const key, const field = map_entry;
             if (ieql(key, entry.key)) {
-                @field(self, field) = entry.as(StripOptional(
-                    @FieldType(DummyUsage, field),
-                )) catch return FeedError.ValueInvalid;
-                return;
+                return assign(&@field(self, field), entry);
             }
         }
 
@@ -222,6 +226,10 @@ pub const MandatoryObjects = struct {
         entry: parse.Entry,
     ) FeedError!void {
         if (ieql("SupportedObjects", entry.key)) {
+            if (self.supported_objects != null) {
+                return FeedError.KeyDuplicated;
+            }
+
             self.supported_objects = fmt.parseInt(u16, entry.value, 0) catch
                 return FeedError.ValueInvalid;
             return;
@@ -246,9 +254,21 @@ pub const MandatoryObjects = struct {
         };
 
         switch (index) {
-            0x1000 => self.@"1000" = {},
-            0x1001 => self.@"1001" = {},
-            0x1018 => self.@"1018" = {},
+            0x1000 => if (self.@"1000" != null) {
+                return FeedError.KeyDuplicated;
+            } else {
+                self.@"1000" = {};
+            },
+            0x1001 => if (self.@"1001" != null) {
+                return FeedError.KeyDuplicated;
+            } else {
+                self.@"1001" = {};
+            },
+            0x1018 => if (self.@"1018" != null) {
+                return FeedError.KeyDuplicated;
+            } else {
+                self.@"1018" = {};
+            },
             else => return FeedError.ValueInvalid,
         }
 
@@ -405,6 +425,10 @@ test FileInfo {
     try t.expectEqualStrings("11:30PM", &section.modification_time.?);
     try t.expectEqualStrings("08-21-1995", &section.modification_date.?);
     try t.expectEqualStrings("Zaphod Beeblebrox", section.modified_by.?);
+    try t.expectEqual(
+        FeedError.KeyDuplicated,
+        section.feed(parse.line("ModifiedBy=Zaphod Beeblebrox").content.entry),
+    );
 }
 
 test DeviceInfo {
@@ -463,6 +487,10 @@ test DeviceInfo {
     try t.expect(!section.simple_boot_up_master.?);
     try t.expectEqual(1, section.number_of_rx_pdo.?);
     try t.expectEqual(2, section.number_of_tx_pdo.?);
+    try t.expectEqual(
+        FeedError.KeyDuplicated,
+        section.feed(parse.line("NrOfTxPdo=").content.entry),
+    );
 }
 
 test DummyUsage {
@@ -470,7 +498,6 @@ test DummyUsage {
 
     const content =
         \\Dummy0001=0
-        \\Dummy0002=1
         \\Dummy0002=1
         \\Dummy0003=1
         \\Dummy0004=1
@@ -486,12 +513,11 @@ test DummyUsage {
         const line: parse.Content = parse.line(raw).content;
         switch (line) {
             .entry => |entry| section.feed(entry) catch |err| {
-                std.debug.print("{s} is not recognized\n", .{entry.key});
+                std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
             .err => |err| {
-                std.debug.print("{any}\n", .{err});
-                std.debug.print("{s}\n", .{raw});
+                std.debug.print("{any}: {s}\n", .{ err, raw });
                 return error.ValueInvalid;
             },
             else => {},
@@ -506,6 +532,10 @@ test DummyUsage {
     try t.expect(section.i16.?);
     try t.expect(section.i32.?);
     try t.expectEqual(null, section.i64);
+    try t.expectEqual(
+        FeedError.KeyDuplicated,
+        section.feed(parse.line("Dummy0007=").content.entry),
+    );
 }
 
 test MandatoryObjects {
