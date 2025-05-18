@@ -62,6 +62,8 @@ pub const FileInfo = struct {
     file_name: ?[]const u8 = null,
     file_version: ?u8 = null,
     file_revision: ?u8 = null,
+    // Format: x.y
+    // Default: 3.0
     eds_version: ?[3]u8 = null,
     description: ?[]const u8 = null,
     /// Format: hh:mm(AM|PM)
