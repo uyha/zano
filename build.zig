@@ -25,6 +25,14 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(library);
 
+    const docs = b.addInstallDirectory(.{
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+        .source_dir = library.getEmittedDocs(),
+    });
+    const docs_step = b.step("zano-docs", "Emit Zano documentation");
+    docs_step.dependOn(&docs.step);
+
     const exe = b.addExecutable(.{
         .name = "zano",
         .root_source_file = b.path("src/main.zig"),

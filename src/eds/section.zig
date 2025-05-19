@@ -1,3 +1,25 @@
+//! Section recognition status:
+//! - CiA 306 - CANopen electronic data sheet
+//!   - [X] `FileInfo`
+//!   - [X] `DeviceInfo`
+//!   - [X] `DummyUsage`
+//!   - [X] `MandatoryObjects`
+//!   - [X] `OptionalObjects`
+//!   - [X] `ManufacturerObjects`
+//!   - [X] Object and Sub-Object (`Object`)
+//!     - DCF entries
+//!       - [ ] `ParameterValue`
+//!       - [ ] `DownloadFile`
+//!       - [ ] `UploadFile`
+//!       - [ ] `Denotation`
+//!   - [ ] `CompactNames` - Compact sub object explicit names
+//!   - [ ] `CompactValues` - Compact sub object explicit values - DCF only
+//!   - [ ] `DeviceComissioning` - DCF only
+//!   - [ ] `ObjectLinks`
+//!   - [ ] `Comments`
+//!   - [ ] Module
+//! - CiA 302 - Framework for CANopen Managers and Programmable CANopen Devices
+//!   - [ ] Dynamic Channels
 pub const FeedError = Allocator.Error || error{
     KeyUnrecognized,
     ValueInvalid,
