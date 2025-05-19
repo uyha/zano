@@ -140,8 +140,8 @@ pub const DeviceInfo = struct {
     number_of_rx_pdo: ?u16 = null,
     number_of_tx_pdo: ?u16 = null,
     lss_supported: ?bool = null,
-    // Specify which PDO communication parameter is implemented by default
-    compact_pdo: ?u8 = null,
+    /// Specify which PDO communication parameter is implemented by default
+    compact_pdo: ?CompactPdo = null,
 
     pub const empty: DeviceInfo = .{};
 
@@ -155,6 +155,15 @@ pub const DeviceInfo = struct {
 
         return FeedError.KeyUnrecognized;
     }
+};
+pub const CompactPdo = packed struct(u8) {
+    cob_id: bool = false,
+    transmission_type: bool = false,
+    inhibit_time: bool = false,
+    _pad0: u1 = 0,
+    event_timer: bool = false,
+    sync_start_value: bool = false,
+    _pad1: u2 = 0,
 };
 
 pub const DummyUsage = struct {
