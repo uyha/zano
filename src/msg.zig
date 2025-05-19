@@ -109,6 +109,14 @@ pub const Message = extern struct {
     pub fn extRemote(id: u16) Message {
         return .{ .id = .extRemote(id), .len = 0, .data = undefined };
     }
+
+    pub fn slice(self: anytype) switch (@TypeOf(self)) {
+        *const Message => []const u8,
+        *Message => []u8,
+        else => unreachable,
+    } {
+        return self.data[0..self.len];
+    }
 };
 
 /// Error from <linux/can/error.h>
