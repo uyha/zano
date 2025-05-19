@@ -85,7 +85,7 @@ pub const Bus = struct {
         );
 
         var request = posix.ifreq{
-            .ifrn = .{ .name = .{0} ** linux.IFNAMESIZE },
+            .ifrn = .{ .name = @splat(0) },
             .ifru = undefined,
         };
         @memcpy(request.ifrn.name[0..name.len], name);
