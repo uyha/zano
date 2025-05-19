@@ -8,10 +8,10 @@
 //!   - [X] `ManufacturerObjects`
 //!   - [X] Object and Sub-Object (`Object`)
 //!     - DCF entries
-//!       - [ ] `ParameterValue`
-//!       - [ ] `DownloadFile`
-//!       - [ ] `UploadFile`
-//!       - [ ] `Denotation`
+//!       - [X] `ParameterValue`
+//!       - [X] `DownloadFile`
+//!       - [X] `UploadFile`
+//!       - [X] `Denotation`
 //!   - [ ] `CompactNames` - Compact sub object explicit names
 //!   - [ ] `CompactValues` - Compact sub object explicit values - DCF only
 //!   - [ ] `DeviceComissioning` - DCF only
@@ -407,7 +407,7 @@ pub const ManufacturerObjects = struct {
 /// - [${index}]
 /// - [${index}sub${sub_index}]
 pub const Object = struct {
-    pub const map = .{
+    pub const eds = .{
         .{ "SubNumber", "sub_number" },
         .{ "ParameterName", "parameter_name" },
         .{ "ObjectType", "object_type" },
@@ -419,6 +419,12 @@ pub const Object = struct {
         .{ "PdoMapping", "pdo_mapping" },
         .{ "ObjFlags", "object_flags" },
         .{ "CompactSubObj", "compact_sub_obj" },
+    };
+    pub const dcf = .{
+        .{ "ParameterValue", "parameter_value" },
+        .{ "UploadFile", "upload_file" },
+        .{ "DownloadFile", "download_file" },
+        .{ "Denotation", "denotation" },
     };
 
     sub_number: ?u8 = null,
@@ -460,10 +466,16 @@ pub const Object = struct {
     /// named [${index}Name].
     compact_sub_obj: ?u8 = null,
 
+    // DCF fields
+    parameter_value: ?[]const u8 = null,
+    upload_file: ?[]const u8 = null,
+    download_file: ?[]const u8 = null,
+    denotation: ?[]const u8 = null,
+
     pub const empty: Object = .{};
 
     pub fn feed(self: *Object, entry: parse.Entry) FeedError!void {
-        inline for (map) |map_entry| {
+        inline for (eds ++ dcf) |map_entry| {
             const key, const field = map_entry;
             if (ieql(key, entry.key)) {
                 return assign(&@field(self, field), entry);
