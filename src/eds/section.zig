@@ -14,7 +14,7 @@
 //!       - [X] `Denotation`
 //!   - [ ] `CompactNames` - Compact sub object explicit names
 //!   - [ ] `CompactValues` - Compact sub object explicit values - DCF only
-//!   - [ ] `DeviceComissioning` - DCF only
+//!   - [X] `DeviceComissioning` - DCF only
 //!   - [ ] `ObjectLinks`
 //!   - [ ] `Comments`
 //!   - [ ] Module
@@ -491,6 +491,39 @@ pub const ObjFlags = packed struct(u32) {
     _pad: u30 = 0,
 };
 
+pub const DeviceComissioning = struct {
+    pub const dcf = .{
+        .{ "NodeID", "node_id" },
+        .{ "NodeName", "node_name" },
+        .{ "BaudRate", "baud_rate" },
+        .{ "NetNumber", "net_number" },
+        .{ "NetworkName", "network_name" },
+        .{ "CANopenManager", "canopen_manager" },
+        .{ "LSS_SerialNumber", "lss_serial_number" },
+    };
+
+    node_id: ?u8 = null,
+    node_name: ?[]const u8 = null,
+    baud_rate: ?u16 = null,
+    net_number: ?u32 = null,
+    network_name: ?[]const u8 = null,
+    canopen_manager: ?bool = null,
+    lss_serial_number: ?u32 = null,
+
+    pub const empty: DeviceComissioning = .{};
+
+    pub fn feed(self: *DeviceComissioning, entry: parse.Entry) FeedError!void {
+        inline for (dcf) |map_entry| {
+            const key, const field = map_entry;
+            if (ieql(key, entry.key)) {
+                return assign(&@field(self, field), entry);
+            }
+        }
+
+        return FeedError.KeyUnrecognized;
+    }
+};
+
 fn StripOptional(T: type) type {
     return switch (@typeInfo(T)) {
         .optional => |info| info.child,
@@ -538,11 +571,10 @@ test FileInfo {
                 std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
-            .err => |err| {
-                std.debug.print("{}: {s}\n", .{ err, raw });
+            else => |wtf| {
+                std.debug.print("{any}: {s}\n", .{ wtf, raw });
                 return error.WTF;
             },
-            else => return error.WTF,
         }
     }
 
@@ -594,11 +626,10 @@ test DeviceInfo {
                 std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
-            .err => |err| {
-                std.debug.print("{}: {s}\n", .{ err, raw });
+            else => |wtf| {
+                std.debug.print("{any}: {s}\n", .{ wtf, raw });
                 return error.WTF;
             },
-            else => return error.WTF,
         }
     }
 
@@ -647,11 +678,10 @@ test DummyUsage {
                 std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
-            .err => |err| {
-                std.debug.print("{}: {s}\n", .{ err, raw });
+            else => |wtf| {
+                std.debug.print("{any}: {s}\n", .{ wtf, raw });
                 return error.WTF;
             },
-            else => return error.WTF,
         }
     }
 
@@ -688,11 +718,10 @@ test MandatoryObjects {
                 std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
-            .err => |err| {
-                std.debug.print("{}: {s}\n", .{ err, raw });
+            else => |wtf| {
+                std.debug.print("{any}: {s}\n", .{ wtf, raw });
                 return error.WTF;
             },
-            else => return error.WTF,
         }
     }
 
@@ -731,11 +760,10 @@ test OptionalObjects {
                 std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
-            .err => |err| {
-                std.debug.print("{}: {s}\n", .{ err, raw });
+            else => |wtf| {
+                std.debug.print("{any}: {s}\n", .{ wtf, raw });
                 return error.WTF;
             },
-            else => return error.WTF,
         }
     }
 
@@ -780,11 +808,10 @@ test ManufacturerObjects {
                 std.debug.print("{}: {s}\n", .{ err, entry.key });
                 return err;
             },
-            .err => |err| {
-                std.debug.print("{}: {s}\n", .{ err, raw });
+            else => |wtf| {
+                std.debug.print("{any}: {s}\n", .{ wtf, raw });
                 return error.WTF;
             },
-            else => return error.WTF,
         }
     }
 
@@ -824,11 +851,10 @@ test Object {
                     std.debug.print("{}: {s}\n", .{ err, entry.key });
                     return err;
                 },
-                .err => |err| {
-                    std.debug.print("{}: {s}\n", .{ err, raw });
+                else => |wtf| {
+                    std.debug.print("{any}: {s}\n", .{ wtf, raw });
                     return error.WTF;
                 },
-                else => return error.WTF,
             }
         }
 
@@ -847,6 +873,50 @@ test Object {
             section.feed(parse.line("DefaultValue=").content.entry),
         );
     }
+}
+
+test DeviceComissioning {
+    const t = std.testing;
+
+    const content =
+        \\NodeID=2
+        \\NodeName=DEVICE2
+        \\Baudrate=1000
+        \\NetNumber=42
+        \\NetworkName=very important subnet in a big network
+        \\LSS_SerialNumber=9912345
+    ;
+
+    var section: DeviceComissioning = .empty;
+
+    var iter = std.mem.tokenizeAny(u8, content, "\r\n");
+    while (iter.next()) |raw| {
+        const line: parse.Content = parse.line(raw).content;
+        switch (line) {
+            .entry => |entry| section.feed(entry) catch |err| {
+                std.debug.print("{}: {s}\n", .{ err, entry.key });
+                return err;
+            },
+            else => |wtf| {
+                std.debug.print("{any}: {s}\n", .{ wtf, raw });
+                return error.WTF;
+            },
+        }
+    }
+
+    try t.expectEqual(2, section.node_id.?);
+    try t.expectEqualStrings("DEVICE2", section.node_name.?);
+    try t.expectEqual(1000, section.baud_rate.?);
+    try t.expectEqual(42, section.net_number.?);
+    try t.expectEqualStrings(
+        "very important subnet in a big network",
+        section.network_name.?,
+    );
+    try t.expectEqual(9912345, section.lss_serial_number.?);
+    try t.expectEqual(
+        FeedError.KeyDuplicated,
+        section.feed(parse.line("NodeID=").content.entry),
+    );
 }
 
 const std = @import("std");
