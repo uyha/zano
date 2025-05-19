@@ -46,6 +46,8 @@ pub const Section = union(enum) {
     mandatory_objects: MandatoryObjects,
     optional_objects: OptionalObjects,
     manufacturer_objects: ManufacturerObjects,
+    object: Object,
+    device_comissioning: DeviceComissioning,
 
     pub fn feed(
         self: *Section,
