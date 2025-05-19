@@ -386,7 +386,7 @@ pub const Object = struct {
         .{ "AccessType", "access_type" },
         .{ "DefaultValue", "default_value" },
         .{ "PdoMapping", "pdo_mapping" },
-        .{ "ObjectFlags", "object_flags" },
+        .{ "ObjFlags", "object_flags" },
         .{ "CompactSubObj", "compact_sub_obj" },
     };
 
@@ -767,6 +767,7 @@ test Object {
             \\DataType=0x0007
             \\AccessType=ro
             \\DefaultValue=
+            \\ObjFlags=3
             \\PDOMapping=0
         ;
 
@@ -792,6 +793,8 @@ test Object {
         try t.expectEqual(types.Object.@"var", section.object_type.?);
         try t.expectEqual(types.Data.unsigned32, section.data_type.?);
         try t.expectEqual(types.Access.ro, section.access_type.?);
+        try t.expect(section.object_flags.?.refuse_write_on_download);
+        try t.expect(section.object_flags.?.refuse_read_on_scan);
         try t.expectEqualStrings("", section.default_value.?);
         try t.expect(!section.pdo_mapping.?);
         try t.expectEqual(null, section.low_limit);

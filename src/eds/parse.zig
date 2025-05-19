@@ -258,8 +258,16 @@ pub const Entry = struct {
                 }
             },
             .@"struct" => |info| {
-                _ = &info;
-                return ParseError.ValueInvalid;
+                if (info.backing_integer) |Int| {
+                    if (std.fmt.parseInt(Int, self.value, 0)) |int| {
+                        return @bitCast(int);
+                    } else |_| {
+                        return ParseError.ValueInvalid;
+                    }
+                }
+                @compileError(
+                    @typeName(T) ++ " is not a packed struct, hence is not supported",
+                );
             },
             else => @compileError(@typeName(T) ++ " is not supported"),
         }
