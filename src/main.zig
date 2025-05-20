@@ -10,18 +10,30 @@ pub fn main() !void {
     try bus.write(.ext(0x00, &.{}));
     try bus.write(.extRemote(0x00));
 
+    var timer: TimerFd = try .init(.monotonic, .nonblock);
+    defer timer.deinit();
+    try timer.set(.every(.sec(1)));
+
     var epoll: Epoll = try .init(.none);
     defer epoll.deinit();
 
     try epoll.add(bus.handle, .{ .events = .in, .data = .fd(bus.handle) });
-    try epoll.modify(bus.handle, .{ .events = .in, .data = .fd(bus.handle) });
+    try epoll.add(timer.handle, .{ .events = .in, .data = .fd(timer.handle) });
 
     var buffer: [16]Epoll.WaitEvent = undefined;
     while (true) {
         for (epoll.wait(&buffer, -1)) |event| {
-            _ = &event;
-            const message = try bus.read();
-            std.debug.print("{X:03}: {X:02}\n", .{ message.id.id, message.slice() });
+            std.debug.print("{s}:{} ({s})\n", .{ @src().file, @src().line, @src().fn_name });
+            if (event.data.file_descriptor == bus.handle) {
+                const message = try bus.read();
+                std.debug.print(
+                    "{X:03}: {X:02}\n",
+                    .{ message.id.id, message.slice() },
+                );
+            }
+            if (event.data.file_descriptor == timer.handle) {
+                std.debug.print("Timer expires: {}\n", .{try timer.read()});
+            }
         }
     }
 }
@@ -31,3 +43,4 @@ const posix = std.posix;
 
 const zano = @import("zano");
 const Epoll = zano.Epoll;
+const TimerFd = zano.TimerFd;
