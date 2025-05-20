@@ -39,10 +39,10 @@ pub const Epoll = struct {
             return .{ .file_descriptor = value };
         }
         pub fn uint32(value: u32) Data {
-            return .{ .uint32 = value };
+            return .{ .u32 = value };
         }
         pub fn uint64(value: u64) Data {
-            return .{ .pointer = value };
+            return .{ .u64 = value };
         }
     };
 
@@ -93,6 +93,19 @@ pub const Epoll = struct {
     pub const InputEvent = extern struct {
         events: InputEvents,
         data: Data,
+
+        pub fn ptr(events: InputEvents, value: ?*anyopaque) InputEvent {
+            return .{ .events = events, .data = .ptr(value) };
+        }
+        pub fn fd(events: InputEvents, value: c_int) InputEvent {
+            return .{ .events = events, .data = .fd(value) };
+        }
+        pub fn uint32(events: InputEvents, value: u32) InputEvent {
+            return .{ .events = events, .data = .unint32(value) };
+        }
+        pub fn uint64(events: InputEvents, value: u64) InputEvent {
+            return .{ .events = events, .data = .uint64(value) };
+        }
     };
 
     pub fn add(
