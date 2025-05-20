@@ -95,11 +95,6 @@ pub const Epoll = struct {
         data: Data,
     };
 
-    // Extracted from <sys/epoll.h>
-    const EPOLL_CTL_ADD = 1;
-    const EPOLL_CTL_DEL = 2;
-    const EPOLL_CTL_MOD = 3;
-
     pub fn add(
         self: *Epoll,
         fd: posix.fd_t,
@@ -107,7 +102,7 @@ pub const Epoll = struct {
     ) posix.EpollCtlError!void {
         return posix.epoll_ctl(
             @intCast(self.handle),
-            EPOLL_CTL_ADD,
+            linux.EPOLL_CTL_ADD,
             fd,
             @constCast(@ptrCast(&event)),
         );
@@ -115,7 +110,7 @@ pub const Epoll = struct {
     pub fn del(self: *Epoll, fd: posix.fd_t) posix.EpollCtlError!void {
         return posix.epoll_ctl(
             @intCast(self.handle),
-            EPOLL_CTL_DEL,
+            linux.EPOLL_CTL_DEL,
             fd,
             null,
         );
@@ -127,7 +122,7 @@ pub const Epoll = struct {
     ) posix.EpollCtlError!void {
         return posix.epoll_ctl(
             @intCast(self.handle),
-            EPOLL_CTL_MOD,
+            linux.EPOLL_CTL_MOD,
             fd,
             @constCast(@ptrCast(&event)),
         );
@@ -178,4 +173,5 @@ pub const Epoll = struct {
 const std = @import("std");
 const posix = std.posix;
 
+const linux = @import("linux");
 const checkValues = @import("utils.zig").checkValues;
