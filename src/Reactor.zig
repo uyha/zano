@@ -48,6 +48,8 @@ pub fn processMessage(self: *Reactor) ProcessError!void {
     }
 }
 
+/// The function type that `Reactor` accepts. If the function returns `false`,
+/// the handler containing it will be removed from the `Reactor`.
 pub const MessageFunc = fn (
     context: ?*anyopaque,
     id: CanId,
@@ -58,10 +60,7 @@ pub const MessageHandler = struct {
     func: *const MessageFunc,
     context: ?*anyopaque,
 
-    pub fn init(
-        func: *const MessageFunc,
-        context: ?*anyopaque,
-    ) MessageHandler {
+    pub fn init(func: *const MessageFunc, context: ?*anyopaque) MessageHandler {
         return .{
             .func = func,
             .context = context,
