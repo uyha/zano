@@ -3,7 +3,8 @@ const Reactor = @This();
 message_map: MessageMap = .empty,
 bus: Bus,
 
-pub fn init(name: [:0]const u8) Bus.OpenError!Reactor {
+pub const InitError = Bus.OpenError;
+pub fn init(name: [:0]const u8) InitError!Reactor {
     return .{
         .bus = try .open(name),
     };
