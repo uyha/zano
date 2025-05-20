@@ -6,6 +6,8 @@ pub const Bus = bus.Bus;
 
 pub const eds = @import("eds.zig");
 
+pub const Reactor = @import("Reactor.zig");
+
 pub const Epoll = @import("linux/epoll.zig").Epoll;
 pub const TimerFd = @import("linux/timerfd.zig").TimerFd;
 

@@ -1,38 +1,53 @@
+fn echo(_: ?*anyopaque, id: zano.msg.CanId, bytes: []const u8) bool {
+    std.debug.print("{s}:{} ({s})\n", .{ @src().file, @src().line, @src().fn_name });
+    std.debug.print("{X:03}: {X:02}\n", .{ id.id, bytes });
+
+    return true;
+}
+fn oche(state: ?*anyopaque, id: zano.msg.CanId, bytes: []const u8) bool {
+    const count: *usize = @alignCast(@ptrCast(state.?));
+    count.* += 1;
+
+    std.debug.print("{s}:{} ({s})\n", .{ @src().file, @src().line, @src().fn_name });
+    std.debug.print("{X:03}: {X:02}\n", .{ id.id, bytes });
+
+    return count.* < 1;
+}
+fn remove(_: ?*anyopaque, id: zano.msg.CanId, bytes: []const u8) bool {
+    std.debug.print("{s}:{} ({s})\n", .{ @src().file, @src().line, @src().fn_name });
+    std.debug.print("{X:03}: {X:02}\n", .{ id.id, bytes });
+
+    return false;
+}
+
 pub fn main() !void {
-    var bus: zano.Bus = try .open("vcan0");
-    defer bus.deinit();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
+    defer std.debug.assert(!gpa.detectLeaks());
 
-    try bus.set(.err_filter, .all);
-    try bus.set(.fd_frames, true);
+    const allocator = gpa.allocator();
 
-    try bus.write(.std(0x00, &.{}));
-    try bus.write(.stdRemote(0x00));
-    try bus.write(.ext(0x00, &.{}));
-    try bus.write(.extRemote(0x00));
+    var reactor: zano.Reactor = try .init("vcan0");
+    defer reactor.deinit(allocator);
 
-    var timer: TimerFd = try .init(.monotonic, .nonblock);
-    defer timer.deinit();
-    try timer.set(.every(.sec(1)));
+    var count: usize = 0;
+
+    try reactor.register(allocator, .std(0x000), .init(remove, null));
+    try reactor.register(allocator, .std(0x000), .init(oche, &count));
+    try reactor.register(allocator, .std(0x000), .init(remove, null));
+    try reactor.register(allocator, .std(0x000), .init(echo, null));
 
     var epoll: Epoll = try .init(.none);
     defer epoll.deinit();
 
-    try epoll.add(bus.handle, .{ .events = .in, .data = .fd(bus.handle) });
-    try epoll.add(timer.handle, .{ .events = .in, .data = .fd(timer.handle) });
+    try epoll.add(reactor.bus.handle, .fd(.in, reactor.bus.handle));
 
     var buffer: [16]Epoll.WaitEvent = undefined;
-    while (true) {
+    for (0..5) |_| {
         for (epoll.wait(&buffer, -1)) |event| {
-            std.debug.print("{s}:{} ({s})\n", .{ @src().file, @src().line, @src().fn_name });
-            if (event.data.file_descriptor == bus.handle) {
-                const message = try bus.read();
-                std.debug.print(
-                    "{X:03}: {X:02}\n",
-                    .{ message.id.id, message.slice() },
-                );
-            }
-            if (event.data.file_descriptor == timer.handle) {
-                std.debug.print("Timer expires: {}\n", .{try timer.read()});
+            if (event.data.file_descriptor == reactor.bus.handle) {
+                std.debug.print("{s}:{} ({s})\n", .{ @src().file, @src().line, @src().fn_name });
+                try reactor.processMessage();
+                std.debug.print("\n", .{});
             }
         }
     }
