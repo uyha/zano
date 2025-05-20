@@ -8,6 +8,12 @@ pub const Epoll = struct {
 
         pub const none: InitFlags = .{};
         pub const all: InitFlags = .{ .close_on_exec = true };
+
+        comptime {
+            checkValues(InitFlags, .{
+                .{ "close_on_exec", "EPOLL_CLOEXEC" },
+            });
+        }
     };
     pub fn init(flags: InitFlags) posix.EpollCreateError!Epoll {
         return .{
@@ -68,6 +74,21 @@ pub const Epoll = struct {
             .epoll_hup = true,
             .epoll_rdhup = true,
         };
+
+        comptime {
+            checkValues(InputEvents, .{
+                .{ "epoll_in", "EPOLLIN" },
+                .{ "epoll_pri", "EPOLLPRI" },
+                .{ "epoll_out", "EPOLLOUT" },
+                .{ "epoll_err", "EPOLLERR" },
+                .{ "epoll_hup", "EPOLLHUP" },
+                .{ "epoll_rdhup", "EPOLLRDHUP" },
+                .{ "exclusive", "EPOLLEXCLUSIVE" },
+                .{ "wakeup", "EPOLLWAKEUP" },
+                .{ "oneshot", "EPOLLONESHOT" },
+                .{ "edge_trigger", "EPOLLET" },
+            });
+        }
     };
     pub const InputEvent = extern struct {
         events: InputEvents,
@@ -121,6 +142,17 @@ pub const Epoll = struct {
         _pad0: u8 = 0,
         epoll_rdhup: bool = false,
         _pad1: u18 = 0,
+
+        comptime {
+            checkValues(WaitEvents, .{
+                .{ "epoll_in", "EPOLLIN" },
+                .{ "epoll_pri", "EPOLLPRI" },
+                .{ "epoll_out", "EPOLLOUT" },
+                .{ "epoll_err", "EPOLLERR" },
+                .{ "epoll_hup", "EPOLLHUP" },
+                .{ "epoll_rdhup", "EPOLLRDHUP" },
+            });
+        }
     };
     pub const WaitEvent = extern struct {
         event: WaitEvents,
@@ -145,3 +177,5 @@ pub const Epoll = struct {
 
 const std = @import("std");
 const posix = std.posix;
+
+const checkValues = @import("utils.zig").checkValues;

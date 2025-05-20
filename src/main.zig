@@ -21,7 +21,7 @@ pub fn main() !void {
         for (epoll.wait(&buffer, -1)) |event| {
             _ = &event;
             const message = try bus.read();
-            std.debug.print("{X:02}\n", .{message.slice()});
+            std.debug.print("{X:03}: {X:02}\n", .{ message.id.id, message.slice() });
         }
     }
 }
@@ -30,5 +30,4 @@ const std = @import("std");
 const posix = std.posix;
 
 const zano = @import("zano");
-
-const Epoll = @import("linux/epoll.zig").Epoll;
+const Epoll = zano.Epoll;

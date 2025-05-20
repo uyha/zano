@@ -4,6 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const linux = b.addTranslateC(.{
+        .root_source_file = b.path("include/linux.h"),
+        .optimize = optimize,
+        .target = target,
+    });
+
     const conf = b.addOptions();
     conf.addOption(
         bool,
@@ -16,6 +22,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     module.addOptions("conf", conf);
+    module.addImport("linux", linux.createModule());
 
     const library = b.addLibrary(.{
         .linkage = .static,
