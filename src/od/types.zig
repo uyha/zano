@@ -55,9 +55,9 @@ pub const SdoParam = struct {
 
 pub const Identity = struct {
     vendor_id: u32,
-    product_code: u32,
-    revision_number: u32,
-    serial_number: u32,
+    product_code: ?u32 = null,
+    revision_number: ?u32 = null,
+    serial_number: ?u32 = null,
 };
 
 pub const Device = packed struct(u32) {
