@@ -137,15 +137,13 @@ pub const Bus = struct {
 
         _ = try posix.read(self.handle, asBytes(&frame));
 
-        const len = if (comptime conf.can_fd) frame.len else frame.len;
-
         var result: Message = .{
             .id = frame.id,
-            .len = len,
+            .len = frame.len,
             .data = undefined,
         };
 
-        @memcpy(result.data[0..len], frame.data[0..len]);
+        @memcpy(result.data[0..frame.len], frame.data[0..frame.len]);
 
         return result;
     }
