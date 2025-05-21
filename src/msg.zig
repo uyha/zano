@@ -88,7 +88,7 @@ pub const Message = extern struct {
         return message;
     }
 
-    pub fn stdRemote(id: u16) Message {
+    pub fn rtr(id: u16) Message {
         return .{ .id = .stdRemote(id), .len = 0, .data = undefined };
     }
 
@@ -106,7 +106,7 @@ pub const Message = extern struct {
         return message;
     }
 
-    pub fn extRemote(id: u16) Message {
+    pub fn extRtr(id: u16) Message {
         return .{ .id = .extRemote(id), .len = 0, .data = undefined };
     }
 
