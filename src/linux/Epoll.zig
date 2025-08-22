@@ -117,7 +117,7 @@ pub fn add(
         @intCast(self.handle),
         linux.EPOLL_CTL_ADD,
         fd,
-        @constCast(@ptrCast(&event)),
+        @ptrCast(@constCast(&event)),
     );
 }
 pub fn del(self: *Epoll, fd: posix.fd_t) posix.EpollCtlError!void {
@@ -137,7 +137,7 @@ pub fn modify(
         @intCast(self.handle),
         linux.EPOLL_CTL_MOD,
         fd,
-        @constCast(@ptrCast(&event)),
+        @ptrCast(@constCast(&event)),
     );
 }
 

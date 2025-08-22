@@ -57,7 +57,7 @@ fn mnt(
     id: CanId,
     bytes: []const u8,
 ) anyerror!bool {
-    const self: *Device = @alignCast(@ptrCast(ctx.?));
+    const self: *Device = @ptrCast(@alignCast(ctx.?));
 
     if (id.id != self.nmtId() or bytes.len != 1) {
         return true;
@@ -138,7 +138,7 @@ fn check(
     _: CanId,
     bytes: []const u8,
 ) anyerror!bool {
-    const self: *Device = @alignCast(@ptrCast(ctx));
+    const self: *Device = @ptrCast(@alignCast(ctx));
     const bus = &self.master.reactor.bus;
 
     if (bytes.len != 8 or !eql(u8, bytes[0..3], &.{ 0x43, 0x18, 0x10 })) {
